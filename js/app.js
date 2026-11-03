@@ -171,7 +171,7 @@
 
   function vistaBienvenida() {
     return '<div class="view welcome">' +
-      '<img class="logo" src="icons/icon.svg" alt="">' +
+      '<img class="logo" src="icons/icon-192.png" alt="">' +
       '<h1>Hucha</h1><p class="lead">Tus cuentas, tu presupuesto y tu ahorro, en el móvil.</p>' +
       '<div class="card"><h2>Conectar con tu hoja de cálculo</h2>' +
       '<label class="field"><span>URL de la aplicación web de Apps Script</span><input class="input" id="w-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off"></label>' +
@@ -718,7 +718,7 @@
   // ---------------------------------------------------------------- caja fuerte (cifrado local)
   function vistaBloqueo() {
     var pk = caja.metodo === 'passkey';
-    return '<div class="view welcome"><img class="logo" src="icons/icon.svg" alt=""><h1>Hucha</h1><p class="lead">🔒 Bloqueada</p>' +
+    return '<div class="view welcome"><img class="logo" src="icons/icon-192.png" alt=""><h1>Hucha</h1><p class="lead">🔒 Bloqueada</p>' +
       (pk ? '<button class="btn primary block" data-act="desbloquear">Desbloquear con Face ID</button>'
         : '<div class="card"><label class="field"><span>Contraseña</span><input class="input" id="l-pass" type="password" autocomplete="current-password"></label><button class="btn primary block" data-act="desbloquear">Desbloquear</button></div>') +
       '<p class="small" id="l-err" style="text-align:center;color:var(--critical)"></p>' +
