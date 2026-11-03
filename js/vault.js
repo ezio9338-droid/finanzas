@@ -71,15 +71,25 @@ var HuchaVault = (function () {
         extensions: { prf: { eval: { first: salt } } }
       }
     }).then(function (cred) {
+      // Algunos navegadores (Safari) no informan del PRF al crear la passkey: se comprueba
+      // de verdad en el paso siguiente, con una autenticación normal.
       var ext = cred.getClientExtensionResults ? cred.getClientExtensionResults() : {};
-      if (!ext.prf || ext.prf.enabled === false) throw new Error('NO_PRF');
       var credId = b64(cred.rawId);
-      var directo = ext.prf.results && ext.prf.results.first;
-      return (directo ? Promise.resolve(new Uint8Array(directo)) : evaluarPrf(credId, salt)).then(function (prf) {
-        return kekDesdePrf(prf, salt).then(function (kek) {
-          return nuevaClaveEnvuelta(kek, { v: 1, metodo: 'passkey', credId: credId, salt: b64(salt) });
-        });
-      });
+      var directo = ext.prf && ext.prf.results && ext.prf.results.first;
+      if (directo) return terminarPasskey(credId, salt, new Uint8Array(directo));
+      return { pendiente: true, credId: credId, salt: b64(salt) };
+    });
+  }
+
+  /** Segundo paso (requiere otro toque del usuario en Safari): obtiene el PRF y crea la caja. */
+  function completarPasskey(credId, saltB64) {
+    var salt = ub64(saltB64);
+    return evaluarPrf(credId, salt).then(function (prf) { return terminarPasskey(credId, salt, prf); });
+  }
+
+  function terminarPasskey(credId, salt, prf) {
+    return kekDesdePrf(prf, salt).then(function (kek) {
+      return nuevaClaveEnvuelta(kek, { v: 1, metodo: 'passkey', credId: credId, salt: b64(salt) });
     });
   }
 
@@ -111,7 +121,7 @@ var HuchaVault = (function () {
   }
 
   return {
-    soportaPasskey: soportaPasskey, configurarPasskey: configurarPasskey, configurarPassword: configurarPassword,
+    soportaPasskey: soportaPasskey, configurarPasskey: configurarPasskey, completarPasskey: completarPasskey, configurarPassword: configurarPassword,
     abrir: abrir, cifrar: cifrar, descifrar: descifrar
   };
 })();

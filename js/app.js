@@ -757,11 +757,13 @@
       '<div class="sheet-actions">' + (obligatorio ? '' : '<button class="btn" data-x="no">Cancelar</button>') + '<button class="btn' + (pk ? '' : ' primary') + '" data-x="pw">Usar contraseña</button></div>' +
       '<p class="small" id="p-err" style="color:var(--critical)"></p>';
     abrirHoja(h, function (el) {
+      var pendiente = null;
       el.addEventListener('click', function (e) {
         var x = e.target.closest('[data-x]'); if (!x) return;
         var err = $('#p-err', el), p;
         if (x.dataset.x === 'no') return cerrarHoja();
         if (x.dataset.x === 'pk') p = HuchaVault.configurarPasskey();
+        else if (x.dataset.x === 'pk2') p = HuchaVault.completarPasskey(pendiente.credId, pendiente.salt);
         else {
           var a = $('#p-1', el).value, b = $('#p-2', el).value;
           if (a.length < 8) { err.textContent = 'Mínimo 8 caracteres.'; return; }
@@ -770,11 +772,19 @@
         }
         x.disabled = true; err.textContent = '';
         p.then(function (r) {
+          if (r.pendiente) {
+            // Passkey creada; Safari exige un segundo toque para obtener la llave.
+            pendiente = r;
+            x.outerHTML = '<button class="btn primary block" data-x="pk2">Último paso: confirmar con Face ID</button>';
+            return;
+          }
           caja = r.meta; llave = r.clave; persist();
           cerrarHoja(); render(); toast('🔒 Datos protegidos');
         }).catch(function (e2) {
           x.disabled = false;
-          err.textContent = e2.message === 'NO_PRF' ? 'Este dispositivo no permite cifrar con Face ID / huella. Usa una contraseña.' : (e2.name === 'NotAllowedError' ? 'Cancelado.' : 'Error: ' + e2.message);
+          err.textContent = e2.message === 'NO_PRF'
+            ? 'Este dispositivo no permite cifrar con Face ID / huella (necesita iOS 18+ y Contraseñas de iCloud). De momento usa una contraseña.'
+            : (e2.name === 'NotAllowedError' ? 'Cancelado o no permitido. Vuelve a pulsar.' : 'Error: ' + (e2.name || '') + ' ' + e2.message);
         });
       });
     }, obligatorio);
