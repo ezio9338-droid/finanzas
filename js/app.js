@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -67,15 +67,30 @@
   var ui = { tab: 'inicio', statIdx: null, filtro: { tipo: 'todos', cuenta: '', q: '', intereses: false }, limite: 150 };
   var sync = { estado: 'idle', ultimo: LS.get('ultimoSync', 0), error: '' }, syncing = false, syncTimer = null;
 
-  function modo() { return LS.get('demo', false) ? 'demo' : (LS.get('url', '') ? 'online' : 'setup'); }
-  function prefijo() { return modo() === 'demo' ? 'demo.' : ''; }
+  var sesion = { url: '', clave: '' }, llave = null, caja = null, seguridad = null;
+  function modo() {
+    if (LS.get('demo', false)) return 'demo';
+    if (caja && !llave) return 'bloqueado';
+    return sesion.url ? 'online' : 'setup';
+  }
 
   function recompute() {
     if (!snapshot) { V = null; return; }
     V = C.aplicarOps(clone(snapshot), queue);
     V.cuentas.sort(function (a, b) { return (a.orden || 0) - (b.orden || 0); });
   }
-  function persist() { DB.set(prefijo() + 'snapshot', snapshot); DB.set(prefijo() + 'queue', queue); }
+  var cadena = Promise.resolve();
+  /** Guarda en el dispositivo. Fuera del modo demo, solo cifrado y solo si la caja está abierta. */
+  function persist() {
+    if (modo() === 'demo') { DB.set('demo.snapshot', snapshot); DB.set('demo.queue', queue); return; }
+    if (!llave || !caja) return;
+    var k = llave, meta = caja, datos = { url: sesion.url, clave: sesion.clave, snapshot: snapshot, queue: queue, ultimoSync: sync.ultimo };
+    cadena = cadena.then(function () { return HuchaVault.cifrar(k, datos); }).then(function (c) {
+      if (caja !== meta) return;
+      meta.iv = c.iv; meta.ct = c.ct;
+      return DB.set('vault', meta);
+    }).catch(function () {});
+  }
 
   function commit(ops) {
     if (modo() === 'demo') { C.aplicarOps(snapshot, ops); }
@@ -93,13 +108,13 @@
     if (!navigator.onLine) { sync.estado = 'off'; pintarEstado(); return Promise.resolve(); }
     syncing = true; sync.estado = 'sync'; pintarEstado();
     var enviadas = queue.length, ops = queue.slice(0, enviadas);
-    return fetch(LS.get('url', ''), {
+    return fetch(sesion.url, {
       method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ clave: LS.get('clave', ''), ops: ops })
+      body: JSON.stringify({ clave: sesion.clave, ops: ops })
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || 'Error desconocido');
-      snapshot = j.estado; queue = queue.slice(enviadas);
+      snapshot = j.estado; queue = queue.slice(enviadas); seguridad = j.seguridad || null;
       sync.estado = queue.length ? 'pend' : 'ok'; sync.ultimo = Date.now(); sync.error = '';
       LS.set('ultimoSync', sync.ultimo);
       persist(); recompute(); render();
@@ -144,6 +159,7 @@
   // ---------------------------------------------------------------- render
   function render() {
     var app = $('#app');
+    if (modo() === 'bloqueado') { $('#tabbar').hidden = true; app.innerHTML = vistaBloqueo(); return; }
     if (modo() === 'setup' || !V) { $('#tabbar').hidden = true; app.innerHTML = vistaBienvenida(); return; }
     $('#tabbar').hidden = false;
     document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.dataset.tab === ui.tab); });
@@ -174,6 +190,8 @@
 
     if (nom) h += '<div class="alert info"><span class="ico">€</span><div class="grow">Has cobrado la nómina. ¿Repartimos el sobrante?<div style="margin-top:8px"><button class="btn small primary" data-act="reparto" data-id="' + esc(nom.id) + '">Repartir</button> <button class="btn small" data-act="reparto-no" data-id="' + esc(nom.id) + '">Ya lo hice</button></div></div></div>';
     if (sync.estado === 'err' && modo() === 'online') al.unshift({ nivel: 'critical', texto: 'Sincronización: ' + sync.error });
+    if (seguridad && seguridad.fallos7d) al.unshift({ nivel: 'critical', texto: seguridad.fallos7d + ' intento(s) de acceso a tu hoja con una clave incorrecta en los últimos 7 días' + (seguridad.ultimo ? ' (último: ' + new Date(seguridad.ultimo).toLocaleString('es-ES') + ')' : '') + '. Si no fuiste tú, cambia la clave secreta desde el menú Hucha de la hoja.' });
+    if (modo() === 'online' && !caja) al.unshift({ nivel: 'serious', texto: 'Este dispositivo aún no está protegido. Ve a Ajustes → Seguridad.' });
 
     var pct = Math.max(0, p.pct), cls = pct >= 1 ? 'critical' : pct >= 0.8 ? 'serious' : '';
     h += '<div class="card">' +
@@ -400,17 +418,20 @@
       return '<li><div class="grow"><div class="title">' + esc(f.concepto) + (f.activo === false ? ' <span class="muted">(inactivo)</span>' : '') + '</div><div class="subline">' + frec + rest + ' · próximo ' + (f.proxima ? fCorta(f.proxima) : '—') + '</div></div><span class="amount ' + (f.tipo === 'ingreso' ? 'pos' : f.tipo === 'transferencia' ? 'tr' : '') + '">' + (f.modo === 'liquidar' ? 'saldo' : fmt(f.importe)) + '</span></li>';
     }).join('') + '</ul><p class="small muted">Se registran solos cada día. Para añadir o cambiar, edita la hoja «Fijos».</p></div>';
 
-    var pinOn = !!LS.get('pin', null);
-    h += '<div class="card"><h2>Seguridad</h2>' +
-      '<div class="switch"><span>Pedir PIN al abrir</span><input type="checkbox" data-act="pin-toggle"' + (pinOn ? ' checked' : '') + '></div>' +
-      (pinOn ? '<button class="btn small" data-act="pin-cambiar">Cambiar PIN</button>' : '') + '</div>';
+    if (modo() === 'online') {
+      h += '<div class="card"><h2>Seguridad</h2><p class="small sec" style="margin-top:0">' +
+        (caja ? '🔒 Los datos de este dispositivo están cifrados (AES-256). Se desbloquean con ' + (caja.metodo === 'passkey' ? 'Face ID / huella' : 'tu contraseña') + ' y se bloquean solos a los 30 s fuera de la app.' : '⚠️ Este dispositivo aún no está protegido: no se guarda nada hasta que lo protejas.') + '</p>' +
+        '<div class="stack"><button class="btn block' + (caja ? '' : ' primary') + '" data-act="proteger">' + (caja ? 'Cambiar método de desbloqueo' : 'Proteger ahora') + '</button>' +
+        (caja ? '<button class="btn block" data-act="bloquear">Bloquear ahora</button>' : '') + '</div>' +
+        (seguridad ? '<p class="small muted">Intentos de acceso fallidos a la hoja (7 días): ' + seguridad.fallos7d + '</p>' : '') + '</div>';
+    }
 
     h += '<div class="card"><h2>Conexión</h2>';
     if (modo() === 'demo') {
       h += '<p class="small sec" style="margin-top:0">Estás en modo demo con datos de ejemplo. Nada se guarda en Google.</p><button class="btn primary block" data-act="salir-demo">Conectar mi hoja de cálculo</button>';
     } else {
-      h += '<label class="field"><span>URL de Apps Script</span><input class="input" id="a-url" value="' + esc(LS.get('url', '')) + '" autocapitalize="off" autocomplete="off"></label>' +
-        '<label class="field"><span>Clave secreta</span><input class="input" id="a-clave" type="password" value="' + esc(LS.get('clave', '')) + '" autocapitalize="off" autocomplete="off"></label>' +
+      h += '<label class="field"><span>URL de Apps Script</span><input class="input" id="a-url" value="' + esc(sesion.url) + '" autocapitalize="off" autocomplete="off"></label>' +
+        '<label class="field"><span>Clave secreta</span><input class="input" id="a-clave" type="password" value="' + esc(sesion.clave) + '" autocapitalize="off" autocomplete="off"></label>' +
         '<div class="inline"><button class="btn" data-act="guardar-conexion">Guardar</button><button class="btn primary" data-act="sync">Sincronizar ahora</button></div>' +
         '<p class="small muted">Última sincronización: ' + (sync.ultimo ? new Date(sync.ultimo).toLocaleString('es-ES') : 'nunca') + (queue.length ? ' · ' + queue.length + ' cambios sin enviar' : '') + (sync.error ? '<br><span style="color:var(--critical)">' + esc(sync.error) + '</span>' : '') + '</p>';
     }
@@ -419,7 +440,7 @@
     h += '<div class="card"><h2>Datos</h2><div class="stack">' +
       '<button class="btn block" data-act="exportar">Descargar copia de seguridad (JSON)</button>' +
       '<button class="btn block danger" data-act="reset">Desconectar y borrar datos de este dispositivo</button></div>' +
-      '<p class="small muted">Hucha ' + VERSION + ' · Tus datos viven en tu hoja de Google y en este dispositivo.</p></div>';
+      '<p class="small muted">Hucha ' + VERSION + ' · Tus datos viven en tu hoja de Google y, cifrados, en este dispositivo.</p></div>';
     return h;
   }
   function campoNum(k, label, v) {
@@ -428,12 +449,13 @@
 
   // ---------------------------------------------------------------- hoja (overlay)
   var hoja = null;
-  function abrirHoja(html, onMount) {
+  function abrirHoja(html, onMount, fija) {
     cerrarHoja();
     hoja = document.createElement('div');
     hoja.className = 'overlay';
+    if (fija) hoja.dataset.fija = '1';
     hoja.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-body">' + html + '</div></div>';
-    hoja.addEventListener('click', function (e) { if (e.target === hoja) cerrarHoja(); });
+    if (!fija) hoja.addEventListener('click', function (e) { if (e.target === hoja) cerrarHoja(); });
     document.body.appendChild(hoja);
     document.body.style.overflow = 'hidden';
     if (onMount) onMount(hoja);
@@ -693,47 +715,77 @@
     });
   }
 
-  // ---------------------------------------------------------------- PIN
-  function hashPin(p) {
-    var data = new TextEncoder().encode('hucha:' + p);
-    return crypto.subtle.digest('SHA-256', data).then(function (b) {
-      return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-    });
+  // ---------------------------------------------------------------- caja fuerte (cifrado local)
+  function vistaBloqueo() {
+    var pk = caja.metodo === 'passkey';
+    return '<div class="view welcome"><img class="logo" src="icons/icon.svg" alt=""><h1>Hucha</h1><p class="lead">🔒 Bloqueada</p>' +
+      (pk ? '<button class="btn primary block" data-act="desbloquear">Desbloquear con Face ID</button>'
+        : '<div class="card"><label class="field"><span>Contraseña</span><input class="input" id="l-pass" type="password" autocomplete="current-password"></label><button class="btn primary block" data-act="desbloquear">Desbloquear</button></div>') +
+      '<p class="small" id="l-err" style="text-align:center;color:var(--critical)"></p>' +
+      '<button class="btn block" style="margin-top:28px" data-act="reconectar">¿No puedes entrar? Reconectar desde cero</button></div>';
   }
-  var bloqueado = false;
-  function pantallaPin(modoPin, onOk) {
-    // modoPin: 'abrir' | 'crear'
-    var pin = '', primero = null, el = document.createElement('div');
-    el.className = 'lock';
-    function pintar(msg) {
-      el.innerHTML = '<img src="icons/icon.svg" alt="" style="width:64px;height:64px;border-radius:16px">' +
-        '<h2>' + (msg || (modoPin === 'abrir' ? 'Introduce tu PIN' : primero === null ? 'Elige un PIN de 4 dígitos' : 'Repítelo')) + '</h2>' +
-        '<div class="dots">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i < pin.length ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
-        '<div class="keypad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(function (k) { return k ? '<button data-p="' + k + '">' + k + '</button>' : '<span></span>'; }).join('') + '</div>' +
-        (modoPin === 'crear' ? '<button class="btn" data-p="x" style="margin-top:18px">Cancelar</button>' : '');
-    }
-    function fallo(msg) { pin = ''; pintar(msg); $('.dots', el).classList.add('shake'); }
-    el.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-p]'); if (!b) return;
-      var k = b.dataset.p;
-      if (k === 'x') { el.remove(); return; }
-      if (k === '⌫') pin = pin.slice(0, -1); else if (pin.length < 4) pin += k;
-      pintar();
-      if (pin.length < 4) return;
-      if (modoPin === 'abrir') {
-        hashPin(pin).then(function (hsh) {
-          if (hsh === LS.get('pin', '')) { el.remove(); bloqueado = false; if (onOk) onOk(); }
-          else fallo('PIN incorrecto');
+
+  var abriendo = false;
+  function desbloquear(silencioso) {
+    if (abriendo || !caja) return;
+    abriendo = true;
+    var campo = $('#l-pass'), pass = campo ? campo.value : null;
+    HuchaVault.abrir(caja, pass).then(function (k) {
+      return HuchaVault.descifrar(k, caja).then(function (d) {
+        llave = k; sesion = { url: d.url, clave: d.clave }; snapshot = d.snapshot; queue = d.queue || []; sync.ultimo = d.ultimoSync || 0;
+        recompute(); render(); hacerSync();
+      });
+    }).catch(function (e) {
+      var err = $('#l-err');
+      if (err && silencioso !== true) err.textContent = e.message === 'CLAVE_INCORRECTA' ? 'Contraseña incorrecta.' : (e.name === 'NotAllowedError' ? 'Cancelado. Vuelve a intentarlo.' : 'No se pudo desbloquear: ' + e.message);
+    }).then(function () { abriendo = false; });
+  }
+
+  function bloquear() {
+    if (!caja || !llave) return;
+    cerrarHoja();
+    llave = null; snapshot = null; queue = []; V = null; sesion = { url: '', clave: '' }; seguridad = null;
+    render();
+  }
+
+  function abrirProteccion(obligatorio) {
+    var pk = HuchaVault.soportaPasskey();
+    var h = '<h3>Protege tus datos</h3><p class="small sec" style="margin-top:0">Lo que Hucha guarda en este dispositivo se cifrará (AES-256) y solo se abrirá contigo.</p>' +
+      (pk ? '<button class="btn primary block" data-x="pk">Usar Face ID / huella</button><p class="small muted">Recomendado. Se crea una passkey «Hucha» en tu llavero.</p>' : '') +
+      '<label class="field"><span>' + (pk ? 'O una contraseña' : 'Contraseña') + ' (mínimo 8 caracteres)</span><input class="input" type="password" id="p-1" autocomplete="new-password"></label>' +
+      '<input class="input" type="password" id="p-2" placeholder="Repítela" autocomplete="new-password">' +
+      '<div class="sheet-actions">' + (obligatorio ? '' : '<button class="btn" data-x="no">Cancelar</button>') + '<button class="btn' + (pk ? '' : ' primary') + '" data-x="pw">Usar contraseña</button></div>' +
+      '<p class="small" id="p-err" style="color:var(--critical)"></p>';
+    abrirHoja(h, function (el) {
+      el.addEventListener('click', function (e) {
+        var x = e.target.closest('[data-x]'); if (!x) return;
+        var err = $('#p-err', el), p;
+        if (x.dataset.x === 'no') return cerrarHoja();
+        if (x.dataset.x === 'pk') p = HuchaVault.configurarPasskey();
+        else {
+          var a = $('#p-1', el).value, b = $('#p-2', el).value;
+          if (a.length < 8) { err.textContent = 'Mínimo 8 caracteres.'; return; }
+          if (a !== b) { err.textContent = 'Las contraseñas no coinciden.'; return; }
+          p = HuchaVault.configurarPassword(a);
+        }
+        x.disabled = true; err.textContent = '';
+        p.then(function (r) {
+          caja = r.meta; llave = r.clave; persist();
+          cerrarHoja(); render(); toast('🔒 Datos protegidos');
+        }).catch(function (e2) {
+          x.disabled = false;
+          err.textContent = e2.message === 'NO_PRF' ? 'Este dispositivo no permite cifrar con Face ID / huella. Usa una contraseña.' : (e2.name === 'NotAllowedError' ? 'Cancelado.' : 'Error: ' + e2.message);
         });
-      } else if (primero === null) { primero = pin; pin = ''; pintar(); }
-      else if (primero === pin) { hashPin(pin).then(function (hsh) { LS.set('pin', hsh); el.remove(); toast('PIN activado'); if (onOk) onOk(); }); }
-      else { primero = null; fallo('No coinciden. Otra vez'); }
-    });
-    pintar();
-    document.body.appendChild(el);
-    if (modoPin === 'abrir') bloqueado = true;
+      });
+    }, obligatorio);
   }
-  function bloquearSiHaceFalta() { if (LS.get('pin', null) && !bloqueado) pantallaPin('abrir'); }
+
+  function borrarTodo() {
+    ['url', 'clave', 'pin', 'demo', 'ultimoSync'].forEach(LS.del);
+    snapshot = null; queue = []; V = null; llave = null; caja = null; seguridad = null; sesion = { url: '', clave: '' };
+    DB.set('vault', null); DB.set('snapshot', null); DB.set('queue', []); DB.set('demo.snapshot', null); DB.set('demo.queue', []);
+    cerrarHoja(); render();
+  }
 
   // ---------------------------------------------------------------- eventos
   function irA(tab) { ui.tab = tab; ui.limite = 150; render(); window.scrollTo(0, 0); }
@@ -761,11 +813,14 @@
     else if (act === 'mas') { ui.limite += 200; render(); }
     else if (act === 'stat-prev') { ui.statIdx--; render(); }
     else if (act === 'stat-next') { ui.statIdx++; render(); }
-    else if (act === 'guardar-conexion') { LS.set('url', $('#a-url').value.trim()); LS.set('clave', $('#a-clave').value.trim()); toast('Guardado'); hacerSync(); }
+    else if (act === 'guardar-conexion') { sesion = { url: $('#a-url').value.trim(), clave: $('#a-clave').value.trim() }; persist(); toast('Guardado'); hacerSync(); }
+    else if (act === 'desbloquear') desbloquear(false);
+    else if (act === 'bloquear') bloquear();
+    else if (act === 'proteger') abrirProteccion(false);
+    else if (act === 'reconectar') { if (confirm('Se borrarán los datos guardados en este dispositivo (tu hoja de Google no se toca) y tendrás que conectar de nuevo con la URL y la clave secreta. ¿Seguir?')) borrarTodo(); }
     else if (act === 'exportar') exportar();
     else if (act === 'reset') resetear();
     else if (act === 'salir-demo') { LS.del('demo'); snapshot = null; V = null; render(); }
-    else if (act === 'pin-cambiar') pantallaPin('crear', render);
   });
 
   document.addEventListener('change', function (e) {
@@ -778,10 +833,6 @@
     } else if (t.dataset.pres !== undefined) {
       var val = t.value.trim() === '' ? '' : C.num(t.value);
       commit([{ op: 'presupuesto', cat: t.dataset.pres, valor: val }]); toast('Presupuesto guardado');
-    } else if (t.dataset.act === 'pin-toggle') {
-      if (t.checked) pantallaPin('crear', render);
-      else { LS.del('pin'); toast('PIN desactivado'); }
-      t.checked = !!LS.get('pin', null);
     }
   });
 
@@ -796,6 +847,8 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    if (e.target.id === 'l-pass' && e.key === 'Enter') { desbloquear(); return; }
+    if (hoja && hoja.dataset.fija) return;
     if (!hoja || !form) { if (e.key === 'Escape') cerrarHoja(); return; }
     var tag = (e.target.tagName || '').toLowerCase();
     if (e.key === 'Escape') { cerrarHoja(); return; }
@@ -810,8 +863,9 @@
 
   var ocultoDesde = 0;
   document.addEventListener('visibilitychange', function () {
+    document.body.classList.toggle('oculto', document.hidden && modo() === 'online');
     if (document.hidden) { ocultoDesde = Date.now(); return; }
-    if (ocultoDesde && Date.now() - ocultoDesde > 60000) bloquearSiHaceFalta();
+    if (ocultoDesde && Date.now() - ocultoDesde > 30000 && caja && llave) { bloquear(); return; }
     if (V && modo() === 'online') hacerSync();
     if (V) render();
   });
@@ -823,13 +877,13 @@
     url = (url || '').trim(); clave = (clave || '').trim();
     if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { toast('La URL debe acabar en /exec'); return; }
     if (!clave) { toast('Falta la clave secreta'); return; }
-    LS.set('url', url); LS.set('clave', clave); LS.del('demo');
-    queue = [];
+    sesion = { url: url, clave: clave }; LS.del('demo');
+    queue = []; snapshot = null;
     toast('Conectando…');
     hacerSync().then(function () {
-      if (!snapshot) { toast(sync.error || 'No se pudo conectar'); LS.del('url'); render(); return; }
+      if (!snapshot) { toast(sync.error || 'No se pudo conectar'); sesion = { url: '', clave: '' }; render(); return; }
       toast('¡Conectado!');
-      if (!LS.get('pin', null)) setTimeout(function () { if (confirm('¿Quieres proteger la app con un PIN?')) pantallaPin('crear', render); }, 400);
+      abrirProteccion(true);
     });
   }
 
@@ -842,6 +896,7 @@
   }
 
   function exportar() {
+    if (!confirm('La copia se descarga SIN cifrar. Guárdala en un sitio seguro y bórrala cuando no la necesites. ¿Descargar?')) return;
     var blob = new Blob([JSON.stringify(V, null, 2)], { type: 'application/json' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hucha-' + hoy() + '.json';
     document.body.appendChild(a); a.click(); a.remove();
@@ -850,25 +905,27 @@
 
   function resetear() {
     if (queue.length && !confirm('Hay ' + queue.length + ' cambios sin enviar a la hoja. Se perderán. ¿Seguir?')) return;
-    if (!confirm('Se borrarán la conexión, el PIN y los datos guardados en este dispositivo (tu hoja de Google no se toca). ¿Seguir?')) return;
-    ['url', 'clave', 'pin', 'demo', 'ultimoSync'].forEach(LS.del);
-    snapshot = null; queue = []; V = null;
-    DB.set('snapshot', null); DB.set('queue', []); DB.set('demo.snapshot', null); DB.set('demo.queue', []);
-    render();
+    if (!confirm('Se borrarán la conexión y los datos cifrados guardados en este dispositivo (tu hoja de Google no se toca). ¿Seguir?')) return;
+    borrarTodo();
   }
 
   // ---------------------------------------------------------------- arranque
   function iniciar() {
     CH.bindTips(document.getElementById('app'));
     DB.open().then(function () {
-      if (modo() === 'setup') { render(); return; }
-      return Promise.all([DB.get(prefijo() + 'snapshot'), DB.get(prefijo() + 'queue')]).then(function (r) {
-        snapshot = r[0]; queue = r[1] || [];
-        if (!snapshot && modo() === 'demo') snapshot = C.estadoEjemplo(hoy());
-        recompute(); render();
-        if (modo() === 'online') hacerSync();
+      if (LS.get('demo', false)) {
+        return Promise.all([DB.get('demo.snapshot'), DB.get('demo.queue')]).then(function (r) {
+          snapshot = r[0] || C.estadoEjemplo(hoy()); queue = r[1] || [];
+          recompute(); render();
+        });
+      }
+      ['url', 'clave', 'pin'].forEach(LS.del); // restos de versiones sin cifrar
+      return DB.get('vault').then(function (v) {
+        caja = v && v.wrapped ? v : null;
+        render();
+        if (caja && caja.metodo === 'passkey') setTimeout(function () { desbloquear(true); }, 150);
       });
-    }).then(function () { bloquearSiHaceFalta(); });
+    });
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('sw.js').catch(function () {});
     }

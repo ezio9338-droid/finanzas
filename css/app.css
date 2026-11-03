@@ -287,3 +287,6 @@ details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin
 .welcome .logo { width: 84px; height: 84px; border-radius: 22px; display: block; margin: 0 auto 12px; }
 .welcome h1 { text-align: center; margin: 0 0 4px; }
 .welcome p.lead { text-align: center; color: var(--text-2); margin: 0 0 22px; }
+
+/* Privacidad: contenido difuminado en el selector de apps */
+body.oculto #app, body.oculto .overlay, body.oculto .tabbar { filter: blur(28px); }

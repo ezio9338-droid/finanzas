@@ -1,4 +1,7 @@
 /**
+ * @OnlyCurrentDoc  ← el script solo puede acceder a ESTA hoja, no al resto de tu Drive.
+ */
+/**
  * Hucha · servidor en Google Apps Script
  *
  * Archivos de este proyecto de Apps Script:
@@ -94,7 +97,8 @@ function instalar() {
   if (hoja1 && hoja1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(hoja1);
 
   var props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('CLAVE')) props.setProperty('CLAVE', Utilities.getUuid().replace(/-/g, ''));
+  if (!props.getProperty('CLAVE')) props.setProperty('CLAVE', claveAleatoria());
+  try { props.setProperty('EMAIL', Session.getEffectiveUser().getEmail()); } catch (e) {}
 
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'tareasDiarias') ScriptApp.deleteTrigger(t);
@@ -136,8 +140,13 @@ function verClave() {
   SpreadsheetApp.getUi().alert('Clave secreta:\n' + PropertiesService.getScriptProperties().getProperty('CLAVE'));
 }
 
+function claveAleatoria() {
+  // 2 UUID v4 → 244 bits aleatorios
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+}
+
 function nuevaClave() {
-  var c = Utilities.getUuid().replace(/-/g, '');
+  var c = claveAleatoria();
   PropertiesService.getScriptProperties().setProperty('CLAVE', c);
   SpreadsheetApp.getUi().alert('Nueva clave (actualízala en la app):\n' + c);
 }
@@ -164,27 +173,128 @@ function doGet() {
 function doPost(e) {
   var res;
   try {
-    var req = JSON.parse(e.postData.contents);
+    var cuerpo = e && e.postData && e.postData.contents || '';
+    if (cuerpo.length > 1000000) throw new Error('PETICION_INVALIDA');
+    var req;
+    try { req = JSON.parse(cuerpo); } catch (x) { throw new Error('PETICION_INVALIDA'); }
     var clave = PropertiesService.getScriptProperties().getProperty('CLAVE');
-    if (!clave || req.clave !== clave) throw new Error('CLAVE_INCORRECTA');
+    if (!clave || !igualSeguro(String(req && req.clave || ''), clave)) {
+      registrarFallo('Clave incorrecta');
+      throw new Error('CLAVE_INCORRECTA');
+    }
+    var ops = validarOps(req.ops || []);
     var lock = LockService.getScriptLock();
     lock.waitLock(30000);
     try {
       var st = leerEstado();
       var antes = firma(st);
-      HuchaCore.aplicarOps(st, req.ops || []);
+      HuchaCore.aplicarOps(st, ops);
       HuchaCore.procesarAutomaticos(st, hoyISO());
       var despues = firma(st);
       var cambios = {};
       Object.keys(despues).forEach(function (k) { cambios[k] = despues[k] !== antes[k]; });
       escribirTodo(st, cambios);
       if (cambios.movimientos) actualizarResumen(st);
-      res = { ok: true, estado: st, hoy: hoyISO(), aplicadas: (req.ops || []).length };
+      res = { ok: true, estado: st, hoy: hoyISO(), aplicadas: ops.length, seguridad: resumenSeguridad() };
     } finally { lock.releaseLock(); }
   } catch (err) {
     res = { ok: false, error: String(err && err.message || err) };
   }
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---------------------------------------------------------------- Seguridad
+
+/** Comparación en tiempo constante (no revela cuántos caracteres coinciden). */
+function igualSeguro(a, b) {
+  var d = a.length ^ b.length;
+  for (var i = 0; i < b.length; i++) d |= (a.charCodeAt(i % (a.length || 1)) || 0) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+function registrarFallo(motivo) {
+  var props = PropertiesService.getScriptProperties(), ahora = Date.now();
+  var lista = [];
+  try { lista = JSON.parse(props.getProperty('FALLOS') || '[]'); } catch (x) {}
+  lista.push(ahora);
+  lista = lista.filter(function (t) { return ahora - t < 30 * 86400000; }).slice(-300);
+  props.setProperty('FALLOS', JSON.stringify(lista));
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName('Seguridad') || ss.insertSheet('Seguridad');
+    if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, 2).setValues([['Fecha y hora', 'Evento']]).setFontWeight('bold');
+    sh.appendRow([new Date(), motivo]);
+  } catch (x) {}
+  var email = props.getProperty('EMAIL'), ultimo = +(props.getProperty('ULTIMO_EMAIL') || 0);
+  if (email && ahora - ultimo > 3600000) {
+    var dia = lista.filter(function (t) { return ahora - t < 86400000; }).length;
+    try {
+      MailApp.sendEmail(email, '⚠️ Hucha: intento de acceso con clave incorrecta',
+        'Alguien ha intentado acceder a tu hoja de Hucha con una clave secreta incorrecta.\n\n' +
+        'Intentos en las últimas 24 horas: ' + dia + '\n' +
+        'Último: ' + Utilities.formatDate(new Date(ahora), ZONA, 'dd/MM/yyyy HH:mm') + '\n\n' +
+        'Si no has sido tú (por ejemplo, al escribir mal la clave), te recomendamos:\n' +
+        '1. Abrir la hoja → menú Hucha → Cambiar clave secreta.\n' +
+        '2. Poner la nueva clave en la app (Ajustes → Conexión).\n\n' +
+        'Tus datos no se han enviado: sin la clave correcta la API no devuelve nada.\n' +
+        'Solo recibirás un aviso como máximo cada hora.');
+      props.setProperty('ULTIMO_EMAIL', String(ahora));
+    } catch (x) {}
+  }
+  Utilities.sleep(1500); // frena los intentos automáticos
+}
+
+function resumenSeguridad() {
+  var lista = [];
+  try { lista = JSON.parse(PropertiesService.getScriptProperties().getProperty('FALLOS') || '[]'); } catch (x) {}
+  var ahora = Date.now(), sem = lista.filter(function (t) { return ahora - t < 7 * 86400000; });
+  return { fallos7d: sem.length, ultimo: sem.length ? sem[sem.length - 1] : null };
+}
+
+var RE_ID = /^[A-Za-z0-9_-]{1,80}$/, RE_FECHA = /^\d{4}-\d{2}-\d{2}$/, RE_ORIGEN = /^(manual|redondeo|interes|fijo:[A-Za-z0-9_-]{1,60})$/;
+
+function invalida() { return new Error('PETICION_INVALIDA'); }
+function vTexto(v, max) { v = v === null || v === undefined ? '' : String(v); if (v.length > max) throw invalida(); return v; }
+function vId(v, opcional) { v = vTexto(v, 80); if (v === '' && opcional) return ''; if (!RE_ID.test(v)) throw invalida(); return v; }
+function vNum(v, opcional) {
+  if ((v === '' || v === null || v === undefined) && opcional) return '';
+  if (typeof v !== 'number' || !isFinite(v) || Math.abs(v) > 1e7) throw invalida();
+  return Math.round(v * 100) / 100;
+}
+
+/** Solo se aceptan operaciones conocidas y con datos del tipo y tamaño esperados. */
+function validarOps(ops) {
+  if (!Array.isArray(ops) || ops.length > 500) throw invalida();
+  var cfgOk = Object.keys(DESC_CONFIG);
+  return ops.map(function (op) {
+    if (!op || typeof op !== 'object') throw invalida();
+    if (op.op === 'mov') {
+      var m = op.mov || {};
+      var fecha = vTexto(m.fecha, 10);
+      if (!RE_FECHA.test(fecha)) throw invalida();
+      if (['gasto', 'ingreso', 'transferencia', 'ajuste'].indexOf(m.tipo) < 0) throw invalida();
+      var origen = vTexto(m.origen || 'manual', 70);
+      if (!RE_ORIGEN.test(origen)) throw invalida();
+      return { op: 'mov', mov: {
+        id: vId(m.id), fecha: fecha, tipo: m.tipo, importe: vNum(m.importe),
+        cuenta: vId(m.cuenta), destino: vId(m.destino, true), cat: vTexto(m.cat, 60), sub: vTexto(m.sub, 60),
+        nota: vTexto(m.nota, 200), miParte: vNum(m.miParte, true), nomina: m.nomina === true, reembolso: m.reembolso === true,
+        vinculado: vId(m.vinculado, true), origen: origen, act: typeof m.act === 'number' && isFinite(m.act) ? m.act : Date.now()
+      } };
+    }
+    if (op.op === 'borrar') return { op: 'borrar', id: vId(op.id) };
+    if (op.op === 'config') {
+      if (cfgOk.indexOf(op.clave) < 0) throw invalida();
+      var v = typeof op.valor === 'number' ? vNum(op.valor) : vTexto(op.valor, 100);
+      return { op: 'config', clave: op.clave, valor: v };
+    }
+    if (op.op === 'presupuesto') {
+      var val = op.valor === '' ? '' : vNum(op.valor);
+      if (val !== '' && val < 0) throw invalida();
+      return { op: 'presupuesto', cat: vTexto(op.cat, 60), valor: val };
+    }
+    throw invalida();
+  });
 }
 
 function firma(st) {
@@ -266,6 +376,8 @@ function escribirHoja(nombre, filas) {
       var k = c[0], v = o[k];
       if (v === undefined || v === null) return '';
       if (spec.bool.indexOf(k) >= 0) return v ? 'Sí' : '';
+      // Evita la inyección de fórmulas: un texto que empiece por = + - @ se guarda como texto literal.
+      if (typeof v === 'string' && /^[=+\-@]/.test(v)) return "'" + v;
       if (spec.fechas.indexOf(k) >= 0 && v) { var p = String(v).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
       return v;
     });
