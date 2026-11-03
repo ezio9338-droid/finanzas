@@ -1,26 +1,30 @@
 :root {
   color-scheme: light;
-  --bg: #f4f4f1;
-  --surface: #fcfcfb;
-  --surface-2: #efeee9;
-  --border: rgba(11, 11, 11, 0.10);
-  --text: #0b0b0b;
-  --text-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --accent: #2a78d6;
+  /* Paleta del icono: verde bosque + dorado */
+  --bg: #f5f3ee;
+  --surface: #fdfcf9;
+  --surface-2: #efece4;
+  --border: rgba(6, 30, 24, 0.10);
+  --text: #0b1a15;
+  --text-2: #4b524e;
+  --muted: #858b86;
+  --grid: #e3e0d6;
+  --axis: #c4c1b5;
+  --accent: #0f5a46;
   --accent-ink: #ffffff;
-  --accent-soft: #e3eefc;
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
+  --accent-soft: #e1eee8;
+  --gold: #d9b878;
+  --gold-2: #b98f4e;
+  --gold-ink: #0b2a20;
+  --series-1: #0f7a5c;
+  --series-2: #b07d24;
   --good: #0ca30c;
   --good-text: #006300;
   --warning: #fab219;
   --serious: #ec835a;
   --critical: #d03b3b;
-  --track: #e6e5df;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 16px rgba(0, 0, 0, .05);
+  --track: #e7e3d9;
+  --shadow: 0 1px 2px rgba(6, 30, 24, .04), 0 4px 16px rgba(6, 30, 24, .06);
   --radius: 16px;
   --tabbar-h: 64px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -29,30 +33,31 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-2: #242422;
-    --border: rgba(255, 255, 255, 0.10);
-    --text: #f0efec;
-    --text-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --accent: #3987e5;
-    --accent-soft: #16263b;
-    --series-1: #3987e5;
-    --series-2: #d95926;
+    --bg: #06120e;
+    --surface: #0d1f19;
+    --surface-2: #152a23;
+    --border: rgba(232, 214, 176, 0.10);
+    --text: #f1ece0;
+    --text-2: #c2c0b4;
+    --muted: #8a9089;
+    --grid: #1b302a;
+    --axis: #2a423a;
+    --accent: #d9b878;
+    --accent-ink: #0b2a20;
+    --accent-soft: #2a2a1c;
+    --series-1: #34a07c;
+    --series-2: #b48530;
     --good-text: #0ca30c;
-    --track: #2c2c2a;
+    --track: #1d342c;
     --shadow: none;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0d0d0d; --surface: #1a1a19; --surface-2: #242422; --border: rgba(255,255,255,.10);
-  --text: #f0efec; --text-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
-  --accent: #3987e5; --accent-soft: #16263b; --series-1: #3987e5; --series-2: #d95926;
-  --good-text: #0ca30c; --track: #2c2c2a; --shadow: none;
+  --bg: #06120e; --surface: #0d1f19; --surface-2: #152a23; --border: rgba(232,214,176,.10);
+  --text: #f1ece0; --text-2: #c2c0b4; --muted: #8a9089; --grid: #1b302a; --axis: #2a423a;
+  --accent: #d9b878; --accent-ink: #0b2a20; --accent-soft: #2a2a1c; --series-1: #34a07c; --series-2: #b48530;
+  --good-text: #0ca30c; --track: #1d342c; --shadow: none;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -157,8 +162,8 @@ button { cursor: pointer; }
 .tab svg { width: 24px; height: 24px; }
 .tab.on { color: var(--accent); }
 .tab.add span.plus {
-  width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
-  display: grid; place-items: center; box-shadow: 0 6px 18px rgba(42, 120, 214, .35); margin-top: -18px;
+  width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(145deg, #ecd3a0, var(--gold) 45%, var(--gold-2)); color: var(--gold-ink);
+  display: grid; place-items: center; box-shadow: 0 6px 18px rgba(185, 143, 78, .40); margin-top: -18px;
 }
 .tab.add svg { width: 28px; height: 28px; }
 
