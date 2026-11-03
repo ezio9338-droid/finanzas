@@ -107,7 +107,8 @@ function instalar() {
 
   tareasDiarias();
   Logger.log('Hucha instalada. Tu clave secreta es: ' + props.getProperty('CLAVE'));
-  try { SpreadsheetApp.getUi().alert('Hucha instalada ✅\n\nTu clave secreta:\n' + props.getProperty('CLAVE') + '\n\nCópiala en la app (Ajustes → Conexión).'); } catch (e) {}
+  // Aviso no bloqueante: una ventana (alert) dejaría la ejecución esperando y acabaría en "tiempo de espera agotado".
+  try { SpreadsheetApp.getActiveSpreadsheet().toast('Instalación completada. Ve a menú Hucha → Ver clave secreta.', 'Hucha ✅', 15); } catch (e) {}
 }
 
 function plantillaVacia(hoy) {
