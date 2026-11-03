@@ -54,8 +54,8 @@ var HuchaVault = (function () {
       }
     }).then(function (a) {
       var r = a && a.getClientExtensionResults ? a.getClientExtensionResults() : {};
-      if (!r.prf || !r.prf.results || !r.prf.results.first) throw new Error('NO_PRF');
-      return new Uint8Array(r.prf.results.first);
+      // null = Face ID verificado, pero el gestor de passkeys no admite PRF
+      return r.prf && r.prf.results && r.prf.results.first ? new Uint8Array(r.prf.results.first) : null;
     });
   }
 
@@ -81,10 +81,20 @@ var HuchaVault = (function () {
     });
   }
 
-  /** Segundo paso (requiere otro toque del usuario en Safari): obtiene el PRF y crea la caja. */
+  /**
+   * Segundo paso (requiere otro toque del usuario en Safari): obtiene el PRF y crea la caja.
+   * Si el gestor de passkeys no admite PRF → "modo compatible": clave AES no exportable guardada
+   * en el dispositivo (WebKit la protege con el llavero del sistema) y Face ID como cerradura.
+   * Devuelve además `llaveLocal`, que la app debe guardar en IndexedDB.
+   */
   function completarPasskey(credId, saltB64) {
     var salt = ub64(saltB64);
-    return evaluarPrf(credId, salt).then(function (prf) { return terminarPasskey(credId, salt, prf); });
+    return evaluarPrf(credId, salt).then(function (prf) {
+      if (prf) return terminarPasskey(credId, salt, prf);
+      return S.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']).then(function (k) {
+        return { meta: { v: 1, metodo: 'passkey-local', credId: credId }, clave: k, llaveLocal: k };
+      });
+    });
   }
 
   function terminarPasskey(credId, salt, prf) {
@@ -101,10 +111,24 @@ var HuchaVault = (function () {
     });
   }
 
-  /** Abre la caja: devuelve la clave de datos (no exportable). */
-  function abrir(meta, pass) {
+  /**
+   * Abre la caja: devuelve la clave de datos (no exportable).
+   * @param cargarLlaveLocal función que devuelve (promesa) la llave guardada, para el modo compatible
+   */
+  function abrir(meta, pass, cargarLlaveLocal) {
+    if (meta.metodo === 'passkey-local') {
+      return navigator.credentials.get({
+        publicKey: { challenge: rnd(32), timeout: 60000, userVerification: 'required', allowCredentials: [{ type: 'public-key', id: ub64(meta.credId) }] }
+      }).then(function () { return cargarLlaveLocal(); }).then(function (k) {
+        if (!k) throw new Error('SIN_LLAVE');
+        return k;
+      });
+    }
     var kekP = meta.metodo === 'passkey'
-      ? evaluarPrf(meta.credId, ub64(meta.salt)).then(function (prf) { return kekDesdePrf(prf, ub64(meta.salt)); })
+      ? evaluarPrf(meta.credId, ub64(meta.salt)).then(function (prf) {
+          if (!prf) throw new Error('NO_PRF');
+          return kekDesdePrf(prf, ub64(meta.salt));
+        })
       : kekDesdePassword(pass, ub64(meta.salt), meta.iter || PBKDF2_ITER);
     return kekP.then(function (kek) { return desenvolver(meta, kek); }).catch(function (e) {
       if (e && e.name === 'OperationError') throw new Error('CLAVE_INCORRECTA');

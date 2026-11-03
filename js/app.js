@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.1.1';
+  var VERSION = '1.2.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -420,7 +420,7 @@
 
     if (modo() === 'online') {
       h += '<div class="card"><h2>Seguridad</h2><p class="small sec" style="margin-top:0">' +
-        (caja ? '🔒 Los datos de este dispositivo están cifrados (AES-256). Se desbloquean con ' + (caja.metodo === 'passkey' ? 'Face ID / huella' : 'tu contraseña') + ' y se bloquean solos a los 30 s fuera de la app.' : '⚠️ Este dispositivo aún no está protegido: no se guarda nada hasta que lo protejas.') + '</p>' +
+        (caja ? '🔒 Los datos de este dispositivo están cifrados (AES-256). Se desbloquean con ' + ({ passkey: 'Face ID / huella', 'passkey-local': 'Face ID (modo compatible: llave no exportable guardada en el dispositivo)', password: 'tu contraseña' }[caja.metodo] || caja.metodo) + ' y se bloquean solos a los 30 s fuera de la app.' : '⚠️ Este dispositivo aún no está protegido: no se guarda nada hasta que lo protejas.') + '</p>' +
         '<div class="stack"><button class="btn block' + (caja ? '' : ' primary') + '" data-act="proteger">' + (caja ? 'Cambiar método de desbloqueo' : 'Proteger ahora') + '</button>' +
         (caja ? '<button class="btn block" data-act="bloquear">Bloquear ahora</button>' : '') + '</div>' +
         (seguridad ? '<p class="small muted">Intentos de acceso fallidos a la hoja (7 días): ' + seguridad.fallos7d + '</p>' : '') + '</div>';
@@ -717,7 +717,7 @@
 
   // ---------------------------------------------------------------- caja fuerte (cifrado local)
   function vistaBloqueo() {
-    var pk = caja.metodo === 'passkey';
+    var pk = caja.metodo.indexOf('passkey') === 0;
     return '<div class="view welcome"><img class="logo" src="icons/icon-192.png" alt=""><h1>Hucha</h1><p class="lead">🔒 Bloqueada</p>' +
       (pk ? '<button class="btn primary block" data-act="desbloquear">Desbloquear con Face ID</button>'
         : '<div class="card"><label class="field"><span>Contraseña</span><input class="input" id="l-pass" type="password" autocomplete="current-password"></label><button class="btn primary block" data-act="desbloquear">Desbloquear</button></div>') +
@@ -730,14 +730,14 @@
     if (abriendo || !caja) return;
     abriendo = true;
     var campo = $('#l-pass'), pass = campo ? campo.value : null;
-    HuchaVault.abrir(caja, pass).then(function (k) {
+    HuchaVault.abrir(caja, pass, function () { return DB.get('llaveLocal'); }).then(function (k) {
       return HuchaVault.descifrar(k, caja).then(function (d) {
         llave = k; sesion = { url: d.url, clave: d.clave }; snapshot = d.snapshot; queue = d.queue || []; sync.ultimo = d.ultimoSync || 0;
         recompute(); render(); hacerSync();
       });
     }).catch(function (e) {
       var err = $('#l-err');
-      if (err && silencioso !== true) err.textContent = e.message === 'CLAVE_INCORRECTA' ? 'Contraseña incorrecta.' : (e.name === 'NotAllowedError' ? 'Cancelado. Vuelve a intentarlo.' : 'No se pudo desbloquear: ' + e.message);
+      if (err && silencioso !== true) err.textContent = e.message === 'CLAVE_INCORRECTA' ? 'Contraseña incorrecta.' : e.message === 'SIN_LLAVE' ? 'No se encuentra la llave en este dispositivo. Pulsa «Reconectar desde cero».' : (e.name === 'NotAllowedError' ? 'Cancelado. Vuelve a intentarlo.' : 'No se pudo desbloquear: ' + e.message);
     }).then(function () { abriendo = false; });
   }
 
@@ -778,8 +778,10 @@
             x.outerHTML = '<button class="btn primary block" data-x="pk2">Último paso: confirmar con Face ID</button>';
             return;
           }
-          caja = r.meta; llave = r.clave; persist();
-          cerrarHoja(); render(); toast('🔒 Datos protegidos');
+          caja = r.meta; llave = r.clave;
+          DB.set('llaveLocal', r.llaveLocal || null);
+          persist();
+          cerrarHoja(); render(); toast(r.llaveLocal ? '🔒 Protegido con Face ID (modo compatible)' : '🔒 Datos protegidos');
         }).catch(function (e2) {
           x.disabled = false;
           err.textContent = e2.message === 'NO_PRF'
@@ -793,7 +795,7 @@
   function borrarTodo() {
     ['url', 'clave', 'pin', 'demo', 'ultimoSync'].forEach(LS.del);
     snapshot = null; queue = []; V = null; llave = null; caja = null; seguridad = null; sesion = { url: '', clave: '' };
-    DB.set('vault', null); DB.set('snapshot', null); DB.set('queue', []); DB.set('demo.snapshot', null); DB.set('demo.queue', []);
+    DB.set('vault', null); DB.set('llaveLocal', null); DB.set('snapshot', null); DB.set('queue', []); DB.set('demo.snapshot', null); DB.set('demo.queue', []);
     cerrarHoja(); render();
   }
 
@@ -931,9 +933,9 @@
       }
       ['url', 'clave', 'pin'].forEach(LS.del); // restos de versiones sin cifrar
       return DB.get('vault').then(function (v) {
-        caja = v && v.wrapped ? v : null;
+        caja = v && v.metodo && v.ct ? v : null;
         render();
-        if (caja && caja.metodo === 'passkey') setTimeout(function () { desbloquear(true); }, 150);
+        if (caja && caja.metodo.indexOf('passkey') === 0) setTimeout(function () { desbloquear(true); }, 150);
       });
     });
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
