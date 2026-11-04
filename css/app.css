@@ -301,3 +301,5 @@ details summary { cursor: pointer; color: var(--link); font-size: 14px; margin-t
 
 /* Privacidad: contenido difuminado en el selector de apps */
 body.oculto #app, body.oculto .overlay, body.oculto .tabbar { filter: blur(28px); }
+
+.inline > .field { flex: 1; min-width: 0; margin: 6px 0; }

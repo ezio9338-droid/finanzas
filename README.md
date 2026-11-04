@@ -75,7 +75,8 @@ En el PC puedes usar la misma dirección en cualquier navegador.
 | Corregir un saldo | Toca la cuenta → escribe el saldo real → **Ajustar**. |
 | Editar o borrar | Toca el movimiento en la lista. |
 | Cambiar el % de ahorro o los presupuestos | **Ajustes**. |
-| Añadir un gasto fijo o una cuenta | Edita las pestañas `Fijos` o `Cuentas` de la hoja. La app lo recoge al sincronizar. |
+| Añadir, editar, pausar o borrar un gasto fijo | **Ajustes → Gastos fijos → ＋ Añadir**, o toca uno existente. |
+| Añadir una cuenta | Edita la pestaña `Cuentas` de la hoja. La app la recoge al sincronizar. |
 
 ### Cómo se calcula el presupuesto
 
@@ -127,5 +128,14 @@ apps-script/Code.gs         Servidor: API, automáticos diarios, resumen mensual
 apps-script/Core.gs         Copia de js/core.js (tools/sync-core.sh la regenera)
 sw.js, manifest.webmanifest Modo sin conexión e instalación como app
 ```
+
+### Actualizar el Apps Script
+
+Cuando una versión cambia `apps-script/Code.gs` o `apps-script/Core.gs`:
+
+1. En el editor de Apps Script, pega el contenido nuevo de los archivos que hayan cambiado y guarda (💾).
+2. Ve a **Implementar → Gestionar implementaciones**, pulsa **✏️ (editar)**, en **Versión** elige **Nueva versión** y pulsa **Implementar**.
+
+⚠️ No uses "Nueva implementación", porque eso crearía otra URL. Si editas la implementación existente, la URL se mantiene y no hay que tocar nada en la app.
 
 **Al actualizar la app:** si cambia `js/core.js`, hay que pegar el nuevo `Core.gs` en Apps Script y publicar una versión nueva: **Implementar → Gestionar implementaciones → ✏️ → Versión: Nueva**. La URL no cambia.

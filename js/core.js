@@ -420,6 +420,8 @@ var HuchaCore = (function () {
       } else if (op.op === 'fijo') {
         var k = indexById(state.fijos, op.fijo.id);
         if (k >= 0) state.fijos[k] = Object.assign({}, state.fijos[k], op.fijo); else state.fijos.push(op.fijo);
+      } else if (op.op === 'borrarFijo') {
+        state.fijos = (state.fijos || []).filter(function (f) { return f.id !== op.id; });
       }
     });
     return state;

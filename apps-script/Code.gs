@@ -15,6 +15,7 @@
  */
 
 var ZONA = 'Europe/Madrid';
+var API_VERSION = 2; // 2: gestión de gastos fijos desde la app
 
 var HOJAS = {
   Movimientos: {
@@ -196,7 +197,7 @@ function doPost(e) {
       Object.keys(despues).forEach(function (k) { cambios[k] = despues[k] !== antes[k]; });
       escribirTodo(st, cambios);
       if (cambios.movimientos) actualizarResumen(st);
-      res = { ok: true, estado: st, hoy: hoyISO(), aplicadas: ops.length, seguridad: resumenSeguridad() };
+      res = { ok: true, version: API_VERSION, estado: st, hoy: hoyISO(), aplicadas: ops.length, seguridad: resumenSeguridad() };
     } finally { lock.releaseLock(); }
   } catch (err) {
     res = { ok: false, error: String(err && err.message || err) };
@@ -263,6 +264,11 @@ function vNum(v, opcional) {
   return Math.round(v * 100) / 100;
 }
 
+function vEntero(v, min, max) {
+  if (typeof v !== 'number' || Math.floor(v) !== v || v < min || v > max) throw invalida();
+  return v;
+}
+
 /** Solo se aceptan operaciones conocidas y con datos del tipo y tamaño esperados. */
 function validarOps(ops) {
   if (!Array.isArray(ops) || ops.length > 500) throw invalida();
@@ -289,6 +295,28 @@ function validarOps(ops) {
       var v = typeof op.valor === 'number' ? vNum(op.valor) : vTexto(op.valor, 100);
       return { op: 'config', clave: op.clave, valor: v };
     }
+    if (op.op === 'fijo') {
+      var f = op.fijo || {};
+      if (['gasto', 'ingreso', 'transferencia'].indexOf(f.tipo) < 0) throw invalida();
+      if (['mensual', 'dias'].indexOf(f.frecuencia) < 0) throw invalida();
+      var prox = vTexto(f.proxima, 10);
+      if (!RE_FECHA.test(prox)) throw invalida();
+      var concepto = vTexto(f.concepto, 80).trim();
+      if (!concepto) throw invalida();
+      var importe = vNum(f.importe);
+      if (importe < 0) throw invalida();
+      return { op: 'fijo', fijo: {
+        id: vId(f.id), concepto: concepto, tipo: f.tipo, importe: importe,
+        cuenta: vId(f.cuenta), destino: f.tipo === 'transferencia' ? vId(f.destino) : '',
+        cat: vTexto(f.cat, 60), sub: vTexto(f.sub, 60), frecuencia: f.frecuencia,
+        dia: f.frecuencia === 'mensual' ? vEntero(f.dia, 1, 31) : '',
+        cada: f.frecuencia === 'dias' ? vEntero(f.cada, 1, 366) : '',
+        proxima: prox, restantes: f.restantes === '' || f.restantes === null || f.restantes === undefined ? '' : vEntero(f.restantes, 0, 1000),
+        modo: f.modo === 'liquidar' ? 'liquidar' : '', reembolso: f.reembolso === true, compromiso: f.compromiso === true,
+        financiaDesde: vId(f.financiaDesde, true), activo: f.activo !== false
+      } };
+    }
+    if (op.op === 'borrarFijo') return { op: 'borrarFijo', id: vId(op.id) };
     if (op.op === 'presupuesto') {
       var val = op.valor === '' ? '' : vNum(op.valor);
       if (val !== '' && val < 0) throw invalida();

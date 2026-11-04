@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.2.1';
+  var VERSION = '1.3.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -67,7 +67,7 @@
   var ui = { tab: 'inicio', statIdx: null, filtro: { tipo: 'todos', cuenta: '', q: '', intereses: false }, limite: 150 };
   var sync = { estado: 'idle', ultimo: LS.get('ultimoSync', 0), error: '' }, syncing = false, syncTimer = null;
 
-  var sesion = { url: '', clave: '' }, llave = null, caja = null, seguridad = null;
+  var sesion = { url: '', clave: '' }, llave = null, caja = null, seguridad = null, servidorVersion = 0;
   function modo() {
     if (LS.get('demo', false)) return 'demo';
     if (caja && !llave) return 'bloqueado';
@@ -84,7 +84,7 @@
   function persist() {
     if (modo() === 'demo') { DB.set('demo.snapshot', snapshot); DB.set('demo.queue', queue); return; }
     if (!llave || !caja) return;
-    var k = llave, meta = caja, datos = { url: sesion.url, clave: sesion.clave, snapshot: snapshot, queue: queue, ultimoSync: sync.ultimo };
+    var k = llave, meta = caja, datos = { url: sesion.url, clave: sesion.clave, snapshot: snapshot, queue: queue, ultimoSync: sync.ultimo, servidorVersion: servidorVersion };
     cadena = cadena.then(function () { return HuchaVault.cifrar(k, datos); }).then(function (c) {
       if (caja !== meta) return;
       meta.iv = c.iv; meta.ct = c.ct;
@@ -114,7 +114,7 @@
       body: JSON.stringify({ clave: sesion.clave, ops: ops })
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || 'Error desconocido');
-      snapshot = j.estado; queue = queue.slice(enviadas); seguridad = j.seguridad || null;
+      snapshot = j.estado; queue = queue.slice(enviadas); seguridad = j.seguridad || null; servidorVersion = j.version || 1;
       sync.estado = queue.length ? 'pend' : 'ok'; sync.ultimo = Date.now(); sync.error = '';
       LS.set('ultimoSync', sync.ultimo);
       persist(); recompute(); render();
@@ -416,11 +416,13 @@
       return '<li class="tap" data-act="cuenta" data-id="' + esc(c.id) + '"><span class="avatar">' + (ICONO_CUENTA[c.tipo] || '🏦') + '</span><div class="grow"><div class="title">' + esc(c.nombre) + '</div><div class="subline">ID ' + esc(c.id) + ' · ' + esc(c.tipo) + '</div></div><span class="muted">›</span></li>';
     }).join('') + '</ul><p class="small muted">Para crear o renombrar cuentas, edita la hoja «Cuentas».</p></div>';
 
-    h += '<div class="card"><h2>Gastos fijos y automáticos</h2><ul class="list">' + (V.fijos || []).map(function (f) {
+    var editable = modo() === 'demo' || servidorVersion >= 2;
+    var fijosOrd = (V.fijos || []).slice().sort(function (a, b) { return (a.activo === false) - (b.activo === false) || String(a.proxima).localeCompare(String(b.proxima)); });
+    h += '<div class="card"><h2>Gastos fijos y automáticos' + (editable ? '<span class="right"><button class="btn small" data-act="fijo-nuevo">＋ Añadir</button></span>' : '') + '</h2><ul class="list">' + fijosOrd.map(function (f) {
       var frec = f.frecuencia === 'dias' ? 'cada ' + f.cada + ' días' : 'día ' + f.dia + ' de cada mes';
       var rest = f.restantes !== '' && f.restantes != null ? ' · quedan ' + f.restantes : '';
-      return '<li><div class="grow"><div class="title">' + esc(f.concepto) + (f.activo === false ? ' <span class="muted">(inactivo)</span>' : '') + '</div><div class="subline">' + frec + rest + ' · próximo ' + (f.proxima ? fCorta(f.proxima) : '—') + '</div></div><span class="amount ' + (f.tipo === 'ingreso' ? 'pos' : f.tipo === 'transferencia' ? 'tr' : '') + '">' + (f.modo === 'liquidar' ? 'saldo' : fmt(f.importe)) + '</span></li>';
-    }).join('') + '</ul><p class="small muted">Se registran solos cada día. Para añadir o cambiar, edita la hoja «Fijos».</p></div>';
+      return '<li' + (editable ? ' class="tap" data-act="fijo" data-id="' + esc(f.id) + '"' : '') + ' style="' + (f.activo === false ? 'opacity:.55' : '') + '"><div class="grow"><div class="title">' + esc(f.concepto) + (f.activo === false ? ' <span class="muted">(pausado)</span>' : '') + '</div><div class="subline">' + frec + rest + ' · próximo ' + (f.proxima ? fCorta(f.proxima) : '—') + ' · ' + esc(nombreCuenta(f.cuenta)) + (f.destino ? ' → ' + esc(nombreCuenta(f.destino)) : '') + '</div></div><span class="amount ' + (f.tipo === 'ingreso' ? 'pos' : f.tipo === 'transferencia' ? 'tr' : '') + '">' + (f.modo === 'liquidar' ? 'saldo' : fmt(f.importe)) + '</span>' + (editable ? '<span class="muted">›</span>' : '') + '</li>';
+    }).join('') + '</ul><p class="small muted">' + (editable ? 'Se apuntan solos el día que toca. Toca uno para editarlo, pausarlo o borrarlo.' : 'Para añadirlos o editarlos desde aquí, actualiza el Apps Script (ver README). Mientras, se editan en la hoja «Fijos».') + '</p></div>';
 
     if (modo() === 'online') {
       h += '<div class="card"><h2>Seguridad</h2><p class="small sec" style="margin-top:0">' +
@@ -437,6 +439,7 @@
       h += '<label class="field"><span>URL de Apps Script</span><input class="input" id="a-url" value="' + esc(sesion.url) + '" autocapitalize="off" autocomplete="off"></label>' +
         '<label class="field"><span>Clave secreta</span><input class="input" id="a-clave" type="password" value="' + esc(sesion.clave) + '" autocapitalize="off" autocomplete="off"></label>' +
         '<div class="inline"><button class="btn" data-act="guardar-conexion">Guardar</button><button class="btn primary" data-act="sync">Sincronizar ahora</button></div>' +
+        (sync.estado === 'err' && queue.length ? '<button class="btn block danger" data-act="descartar-cola" style="margin-top:8px">Descartar ' + queue.length + ' cambio(s) sin enviar</button>' : '') +
         '<p class="small muted">Última sincronización: ' + (sync.ultimo ? new Date(sync.ultimo).toLocaleString('es-ES') : 'nunca') + (queue.length ? ' · ' + queue.length + ' cambios sin enviar' : '') + (sync.error ? '<br><span style="color:var(--critical)">' + esc(sync.error) + '</span>' : '') + '</p>';
     }
     h += '</div>';
@@ -691,6 +694,125 @@
     });
   }
 
+  // ---------- Gastos fijos ----------
+  function abrirFijo(fijo) {
+    var nuevo = !fijo;
+    var f = fijo ? clone(fijo) : {
+      id: 'f' + C.uid(), concepto: '', tipo: 'gasto', importe: '', cuenta: V.config.cuentaDefecto || (V.cuentas[0] && V.cuentas[0].id) || '',
+      destino: '', cat: '', sub: '', frecuencia: 'mensual', dia: '', cada: 28, proxima: '', restantes: '', modo: '',
+      reembolso: false, compromiso: true, financiaDesde: '', activo: true
+    };
+    if (f.importe !== '' && f.importe != null) f.importe = String(f.importe).replace('.', ',');
+    var esCredito = function (id) { var c = cuenta(id); return c && c.tipo === 'credito'; };
+
+    function opcionesCat(tipo, sel) {
+      return '<option value="">Elige…</option>' + catsDe(tipo).map(function (c) { return '<option value="' + esc(c.cat) + '"' + (c.cat === sel ? ' selected' : '') + '>' + esc(c.icono + ' ' + c.cat) + '</option>'; }).join('');
+    }
+    function campo(label, html) { return '<label class="field"><span>' + label + '</span>' + html + '</label>'; }
+    function pintar() {
+      var x = f, h = '<h3>' + (nuevo ? 'Nuevo gasto fijo' : 'Editar «' + esc(fijo.concepto) + '»') + '</h3>';
+      h += '<div class="seg">' + [['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['transferencia', 'Transferencia']].map(function (t) {
+        return '<button data-g="tipo" data-v="' + t[0] + '" class="' + (x.tipo === t[0] ? 'on' : '') + '">' + t[1] + '</button>';
+      }).join('') + '</div>';
+      h += campo('Concepto', '<input class="input" data-g="concepto" maxlength="80" value="' + esc(x.concepto) + '" placeholder="p. ej. YouTube Premium Lite">');
+      if (x.tipo === 'transferencia') {
+        h += '<div class="inline">' + campo('Desde', '<select class="input" data-g="cuenta">' + cuentasOpciones(x.cuenta) + '</select>') +
+          campo('Hacia', '<select class="input" data-g="destino"><option value="">Elige…</option>' + cuentasOpciones(x.destino) + '</select>') + '</div>';
+        if (esCredito(x.destino)) h += '<div class="switch"><span>Pagar el saldo completo de la tarjeta</span><input type="checkbox" data-g="liquidar"' + (x.modo === 'liquidar' ? ' checked' : '') + '></div>';
+      } else {
+        h += campo(x.tipo === 'gasto' ? 'Se paga con' : 'Entra en', '<select class="input" data-g="cuenta">' + cuentasOpciones(x.cuenta) + '</select>');
+      }
+      if (x.modo !== 'liquidar') h += campo('Importe (€)', '<input class="input num" data-g="importe" inputmode="decimal" value="' + esc(x.importe) + '" placeholder="0,00">');
+      if (x.tipo === 'ingreso') {
+        h += '<div class="switch"><span>Es un reembolso <span class="muted small">(alguien te paga parte de un gasto)</span></span><input type="checkbox" data-g="reembolso"' + (x.reembolso ? ' checked' : '') + '></div>';
+      }
+      if (x.tipo === 'gasto' || (x.tipo === 'ingreso' && x.reembolso) || x.tipo === 'transferencia') {
+        var subs = x.cat ? subsDe(x.cat) : [];
+        h += '<div class="inline">' + campo(x.tipo === 'transferencia' ? 'Categoría (opcional)' : x.reembolso ? 'Descuenta de' : 'Categoría', '<select class="input" data-g="cat">' + opcionesCat('gasto', x.cat) + '</select>') +
+          campo('Subcategoría', '<input class="input" data-g="sub" list="dl-subs" value="' + esc(x.sub) + '" placeholder="opcional"><datalist id="dl-subs">' + subs.map(function (s2) { return '<option value="' + esc(s2) + '">'; }).join('') + '</datalist>') + '</div>';
+      }
+      h += '<div class="small sec" style="margin-top:6px">Se repite</div><div class="seg" style="margin-top:4px">' +
+        '<button data-g="frecuencia" data-v="mensual" class="' + (x.frecuencia === 'mensual' ? 'on' : '') + '">Cada mes</button>' +
+        '<button data-g="frecuencia" data-v="dias" class="' + (x.frecuencia === 'dias' ? 'on' : '') + '">Cada X días</button></div>';
+      h += '<div class="inline">' + (x.frecuencia === 'mensual'
+        ? campo('Día del mes', '<input class="input num" data-g="dia" inputmode="numeric" value="' + esc(x.dia) + '" placeholder="1-31">')
+        : campo('Cada (días)', '<input class="input num" data-g="cada" inputmode="numeric" value="' + esc(x.cada) + '" placeholder="28">')) +
+        campo('Próximo cargo', '<input class="input" type="date" data-g="proxima" value="' + esc(x.proxima) + '">') + '</div>';
+      h += campo('Pagos restantes', '<input class="input num" data-g="restantes" inputmode="numeric" value="' + esc(x.restantes) + '" placeholder="Vacío = sin fin">');
+      h += '<div class="switch"><span>Cuenta en el presupuesto <span class="muted small">(resta de lo que puedes gastar)</span></span><input type="checkbox" data-g="compromiso"' + (x.compromiso ? ' checked' : '') + '></div>';
+      h += '<details><summary>Opciones avanzadas</summary>' + campo('Al cobrar la nómina, reponer el importe desde', '<select class="input" data-g="financiaDesde"><option value="">— nada —</option>' + cuentasOpciones(x.financiaDesde) + '</select>') + '</details>';
+      if (!nuevo) h += '<div class="switch"><span>Activo <span class="muted small">(desactívalo para pausarlo)</span></span><input type="checkbox" data-g="activo"' + (x.activo !== false ? ' checked' : '') + '></div>';
+      h += '<p class="small" id="g-hint" style="color:var(--text-2)"></p><p class="small" id="g-err" style="color:var(--critical)"></p>';
+      h += '<div class="sheet-actions">' + (nuevo ? '<button class="btn" data-g="cancelar">Cancelar</button>' : '<button class="btn danger" data-g="borrar">Borrar</button>') + '<button class="btn primary" data-g="guardar">Guardar</button></div>';
+      $('.sheet-body', hoja).innerHTML = h;
+      pista();
+    }
+    function pista() {
+      var el = $('#g-hint', hoja); if (!el) return;
+      el.textContent = f.proxima && f.proxima < hoy() ? 'La fecha ya ha pasado: al guardar se apuntarán también los cargos desde ese día hasta hoy.' : '';
+    }
+    function entero(v) { v = String(v == null ? '' : v).trim(); return v === '' ? '' : (/^\d+$/.test(v) ? +v : NaN); }
+    function guardar() {
+      var err = $('#g-err', hoja), x = f, imp = x.modo === 'liquidar' ? 0 : C.r2(C.num(x.importe));
+      var dia = entero(x.dia), cada = entero(x.cada), rest = entero(x.restantes);
+      var fallo = !x.concepto.trim() ? 'Pon un concepto.'
+        : x.modo !== 'liquidar' && !(imp > 0) ? 'Pon un importe.'
+        : !x.cuenta ? 'Elige la cuenta.'
+        : x.tipo === 'transferencia' && (!x.destino || x.destino === x.cuenta) ? 'Elige la cuenta de destino.'
+        : x.tipo === 'gasto' && !x.cat ? 'Elige una categoría.'
+        : x.tipo === 'ingreso' && x.reembolso && !x.cat ? 'Elige de qué categoría descuenta.'
+        : !x.proxima ? 'Pon la fecha del próximo cargo.'
+        : x.frecuencia === 'mensual' && dia !== '' && !(dia >= 1 && dia <= 31) ? 'El día del mes debe ir de 1 a 31.'
+        : x.frecuencia === 'dias' && !(cada >= 1 && cada <= 366) ? 'Indica cada cuántos días.'
+        : rest !== '' && !(rest >= 0 && rest <= 1000) ? 'Los pagos restantes deben ser un número.' : '';
+      if (fallo) { err.textContent = fallo; return; }
+      if (x.frecuencia === 'mensual' && dia === '') dia = C.parseISO(x.proxima).getUTCDate();
+      var obj = {
+        id: x.id, concepto: x.concepto.trim(), tipo: x.tipo, importe: imp, cuenta: x.cuenta,
+        destino: x.tipo === 'transferencia' ? x.destino : '',
+        cat: x.tipo === 'ingreso' && !x.reembolso ? 'Ingresos' : x.cat, sub: x.tipo === 'ingreso' && !x.reembolso ? (x.sub || 'Otros ingresos') : x.sub.trim(),
+        frecuencia: x.frecuencia, dia: x.frecuencia === 'mensual' ? dia : '', cada: x.frecuencia === 'dias' ? cada : '',
+        proxima: x.proxima, restantes: rest, modo: x.tipo === 'transferencia' && x.modo === 'liquidar' ? 'liquidar' : '',
+        reembolso: x.tipo === 'ingreso' && !!x.reembolso, compromiso: !!x.compromiso, financiaDesde: x.financiaDesde || '',
+        activo: x.activo !== false && !(rest === 0)
+      };
+      cerrarHoja();
+      commit([{ op: 'fijo', fijo: obj }]);
+      toast(nuevo ? 'Gasto fijo añadido' : 'Gasto fijo guardado');
+    }
+    abrirHoja('', function (el) {
+      pintar();
+      el.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-g]'); if (!b) return;
+        var k = b.dataset.g;
+        if (k === 'guardar') return guardar();
+        if (k === 'cancelar') return cerrarHoja();
+        if (k === 'borrar') {
+          if (confirm('¿Borrar «' + fijo.concepto + '»? Los movimientos ya apuntados se quedan. (Si solo quieres pararlo un tiempo, desactívalo.)')) { cerrarHoja(); commit([{ op: 'borrarFijo', id: fijo.id }]); toast('Gasto fijo borrado'); }
+          return;
+        }
+        if (b.tagName === 'BUTTON' && b.dataset.v) {
+          if (k === 'tipo' && f.tipo !== b.dataset.v) { f.tipo = b.dataset.v; f.compromiso = f.tipo !== 'transferencia'; f.modo = ''; f.reembolso = false; f.cat = ''; f.sub = ''; }
+          if (k === 'frecuencia') f.frecuencia = b.dataset.v;
+          pintar();
+        }
+      });
+      el.addEventListener('change', function (e) {
+        var t = e.target, k = t.dataset && t.dataset.g; if (!k) return;
+        if (t.type === 'checkbox') {
+          if (k === 'liquidar') f.modo = t.checked ? 'liquidar' : '';
+          else f[k] = t.checked;
+          if (k === 'reembolso') { f.compromiso = t.checked; if (!t.checked) { f.cat = ''; f.sub = ''; } }
+          pintar(); return;
+        }
+        f[k] = t.value;
+        if (k === 'destino' || k === 'cat') { if (k === 'cat') f.sub = ''; if (k === 'destino' && !esCredito(t.value)) f.modo = ''; pintar(); }
+        if (k === 'proxima') pista();
+      });
+      el.addEventListener('input', function (e) { var t = e.target, k = t.dataset && t.dataset.g; if (k && t.type !== 'checkbox') f[k] = t.value; });
+    });
+  }
+
   // ---------- Detalle de cuenta ----------
   function abrirCuenta(id) {
     var c = cuenta(id), s = C.saldos(V)[id] || 0;
@@ -736,7 +858,7 @@
     var campo = $('#l-pass'), pass = campo ? campo.value : null;
     HuchaVault.abrir(caja, pass, function () { return DB.get('llaveLocal'); }).then(function (k) {
       return HuchaVault.descifrar(k, caja).then(function (d) {
-        llave = k; sesion = { url: d.url, clave: d.clave }; snapshot = d.snapshot; queue = d.queue || []; sync.ultimo = d.ultimoSync || 0;
+        llave = k; sesion = { url: d.url, clave: d.clave }; snapshot = d.snapshot; queue = d.queue || []; sync.ultimo = d.ultimoSync || 0; servidorVersion = d.servidorVersion || 0;
         recompute(); render(); hacerSync();
       });
     }).catch(function (e) {
@@ -824,6 +946,9 @@
     }
     else if (act === 'reparto') abrirReparto(id);
     else if (act === 'reparto-no') { LS.set('repartoHecho.' + id, true); render(); }
+    else if (act === 'fijo') { var fj = (V.fijos || []).filter(function (x) { return x.id === id; })[0]; if (fj) abrirFijo(fj); }
+    else if (act === 'fijo-nuevo') abrirFijo(null);
+    else if (act === 'descartar-cola') { if (confirm('Se descartarán ' + queue.length + ' cambio(s) que el servidor no ha aceptado. ¿Seguir?')) { queue = []; sync.estado = 'idle'; sync.error = ''; persist(); recompute(); render(); hacerSync(); } }
     else if (act === 'fallos-ok') { LS.set('fallosVistos', +id); render(); }
     else if (act === 'ftipo') { ui.filtro.tipo = id; render(); }
     else if (act === 'fint') { ui.filtro.intereses = !ui.filtro.intereses; render(); }
