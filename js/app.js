@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.2.0';
+  var VERSION = '1.2.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -190,7 +190,11 @@
 
     if (nom) h += '<div class="alert info"><span class="ico">€</span><div class="grow">Has cobrado la nómina. ¿Repartimos el sobrante?<div style="margin-top:8px"><button class="btn small primary" data-act="reparto" data-id="' + esc(nom.id) + '">Repartir</button> <button class="btn small" data-act="reparto-no" data-id="' + esc(nom.id) + '">Ya lo hice</button></div></div></div>';
     if (sync.estado === 'err' && modo() === 'online') al.unshift({ nivel: 'critical', texto: 'Sincronización: ' + sync.error });
-    if (seguridad && seguridad.fallos7d) al.unshift({ nivel: 'critical', texto: seguridad.fallos7d + ' intento(s) de acceso a tu hoja con una clave incorrecta en los últimos 7 días' + (seguridad.ultimo ? ' (último: ' + new Date(seguridad.ultimo).toLocaleString('es-ES') + ')' : '') + '. Si no fuiste tú, cambia la clave secreta desde el menú Hucha de la hoja.' });
+    // Aviso de intentos fallidos: solo los NUEVOS desde la última vez que lo marcaste como visto.
+    if (seguridad && seguridad.ultimo && seguridad.ultimo > LS.get('fallosVistos', 0)) {
+      h += '<div class="alert critical"><span class="ico">!</span><div class="grow">Intento de acceso a tu hoja con una clave incorrecta (último: ' + esc(new Date(seguridad.ultimo).toLocaleString('es-ES')) + '). Si no fuiste tú, cambia la clave secreta desde el menú Hucha de la hoja.' +
+        '<div style="margin-top:8px"><button class="btn small" data-act="fallos-ok" data-id="' + seguridad.ultimo + '">Fui yo / Entendido</button></div></div></div>';
+    }
     if (modo() === 'online' && !caja) al.unshift({ nivel: 'serious', texto: 'Este dispositivo aún no está protegido. Ve a Ajustes → Seguridad.' });
 
     var pct = Math.max(0, p.pct), cls = pct >= 1 ? 'critical' : pct >= 0.8 ? 'serious' : '';
@@ -820,6 +824,7 @@
     }
     else if (act === 'reparto') abrirReparto(id);
     else if (act === 'reparto-no') { LS.set('repartoHecho.' + id, true); render(); }
+    else if (act === 'fallos-ok') { LS.set('fallosVistos', +id); render(); }
     else if (act === 'ftipo') { ui.filtro.tipo = id; render(); }
     else if (act === 'fint') { ui.filtro.intereses = !ui.filtro.intereses; render(); }
     else if (act === 'mas') { ui.limite += 200; render(); }
