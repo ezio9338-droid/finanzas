@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.3.0';
+  var VERSION = '1.3.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -461,15 +461,63 @@
     hoja = document.createElement('div');
     hoja.className = 'overlay';
     if (fija) hoja.dataset.fija = '1';
-    hoja.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-body">' + html + '</div></div>';
-    if (!fija) hoja.addEventListener('click', function (e) { if (e.target === hoja) cerrarHoja(); });
+    hoja.innerHTML = '<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-top"><div class="grab"></div>' +
+      (fija ? '' : '<button class="sheet-close" aria-label="Cerrar">✕</button>') + '</div><div class="sheet-body">' + html + '</div></div>';
+    if (!fija) {
+      hoja.addEventListener('click', function (e) { if (e.target === hoja) cerrarHoja(); });
+      $('.sheet-close', hoja).addEventListener('click', function (e) { e.stopPropagation(); cerrarHoja(true); });
+      deslizarParaCerrar(hoja);
+    }
     document.body.appendChild(hoja);
     document.body.style.overflow = 'hidden';
     if (onMount) onMount(hoja);
   }
-  function cerrarHoja() {
-    if (hoja) { hoja.remove(); hoja = null; form = null; }
+  function cerrarHoja(animado) {
+    var el = hoja;
+    if (el) {
+      hoja = null; form = null;
+      if (animado) {
+        var sh = $('.sheet', el);
+        sh.style.transition = 'transform .2s ease-in'; sh.style.transform = 'translateY(100%)';
+        el.style.transition = 'opacity .2s'; el.style.opacity = '0';
+        setTimeout(function () { el.remove(); }, 200);
+      } else el.remove();
+    }
     document.body.style.overflow = '';
+  }
+
+  /** Gesto: arrastrar la hoja hacia abajo (desde arriba del todo) la cierra. */
+  function deslizarParaCerrar(ov) {
+    var sh = $('.sheet', ov), y0 = 0, x0 = 0, t0 = 0, dy = 0, estado = 0; // 0 nada · 1 pendiente · 2 arrastrando · -1 ignorar
+    sh.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { estado = -1; return; }
+      var enCabecera = !!e.target.closest('.sheet-top');
+      estado = (sh.scrollTop <= 0 || enCabecera) ? 1 : -1;
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = Date.now(); dy = 0;
+    }, { passive: true });
+    sh.addEventListener('touchmove', function (e) {
+      if (estado <= 0) return;
+      var y = e.touches[0].clientY - y0, x = e.touches[0].clientX - x0;
+      if (estado === 1) {
+        if (Math.abs(y) < 6 && Math.abs(x) < 6) return;
+        if (y <= 0 || Math.abs(x) > Math.abs(y)) { estado = -1; return; }
+        estado = 2; sh.style.transition = 'none';
+      }
+      dy = Math.max(0, y);
+      sh.style.transform = 'translateY(' + dy + 'px)';
+      ov.style.backgroundColor = 'rgba(0,0,0,' + (0.35 * Math.max(0, 1 - dy / 400)) + ')';
+      e.preventDefault();
+    }, { passive: false });
+    function fin() {
+      if (estado !== 2) { estado = 0; return; }
+      estado = 0;
+      var v = dy / Math.max(1, Date.now() - t0);
+      if (dy > 110 || (dy > 40 && v > 0.6)) { cerrarHoja(true); return; }
+      sh.style.transition = 'transform .2s ease-out'; sh.style.transform = '';
+      ov.style.backgroundColor = '';
+    }
+    sh.addEventListener('touchend', fin);
+    sh.addEventListener('touchcancel', fin);
   }
 
   // ---------- Formulario de movimiento ----------
@@ -550,6 +598,11 @@
     h += '<div class="keypad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', '⌫'].map(function (k) { return '<button data-k="' + k + '" aria-label="' + (k === '⌫' ? 'Borrar' : k) + '">' + k + '</button>'; }).join('') + '</div>';
     h += '<div class="sheet-actions">' + (f.id ? '<button class="btn danger" data-f="borrar">Borrar</button>' : '<button class="btn" data-f="cancelar">Cancelar</button>') + '<button class="btn primary" data-f="guardar">Guardar</button></div>';
     $('.sheet-body', hoja).innerHTML = h;
+    // Que la categoría elegida quede a la vista en la fila desplazable
+    hoja.querySelectorAll('.chips').forEach(function (fila) {
+      var on = fila.querySelector('.chip.on');
+      if (on) fila.scrollLeft = on.offsetLeft - fila.offsetLeft - fila.clientWidth / 2 + on.offsetWidth / 2;
+    });
     pintarHint();
   }
 
