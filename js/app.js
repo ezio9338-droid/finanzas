@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.10.1';
+  var VERSION = '1.11.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -159,6 +159,28 @@
     return IK.svg(c && c.icono ? c.icono : 'tag');
   }
   function cicloActual() { var cs = C.ciclos(V, hoy()); return cs[cs.length - 1]; }
+  /** Traspasos de reposición (p. ej. Mac → Revolut) que tocan hoy o hace poco y aún no has marcado como hechos. */
+  function traspasosPendientes(t) {
+    var sob = V.config.cuentaSobrante, out = [], vistos = {};
+    if (!sob) return out;
+    (V.fijos || []).forEach(function (f) {
+      if (!f.financiaDesde || f.financiaDesde === sob || f.activo === false) return;
+      // Ya registrados por el servidor en los últimos 3 días
+      V.movimientos.forEach(function (m) {
+        if (m.id.indexOf('f-' + f.id + '-') !== 0 || m.id.slice(-7) !== '-repone') return;
+        if (m.fecha > t || C.diffDays(m.fecha, t) > 3) return;
+        vistos[m.id] = true;
+        out.push({ id: m.id, fecha: m.fecha, concepto: f.concepto, importe: m.importe, desde: m.cuenta, hacia: m.destino });
+      });
+      // Si hoy toca y el servidor aún no lo ha apuntado
+      if (f.proxima && f.proxima <= t && C.diffDays(f.proxima, t) <= 3) {
+        var id = 'f-' + f.id + '-' + f.proxima + '-repone';
+        if (!vistos[id]) out.push({ id: id, fecha: f.proxima, concepto: f.concepto, importe: C.num(f.importe), desde: f.financiaDesde, hacia: sob });
+      }
+    });
+    return out.filter(function (x) { return !LS.get('traspasoHecho.' + x.id, false); });
+  }
+
   function nominaPendienteDeReparto() {
     var ns = V.movimientos.filter(function (m) { return m.nomina && m.tipo === 'ingreso'; }).sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
     var n = ns[0];
@@ -202,6 +224,10 @@
     var h = topbar('Hucha');
 
     if (nom) h += '<div class="alert info"><span class="ico">€</span><div class="grow">Has cobrado la nómina. ¿Repartimos el sobrante?<div style="margin-top:8px"><button class="btn small primary" data-act="reparto" data-id="' + esc(nom.id) + '">Repartir</button> <button class="btn small" data-act="reparto-no" data-id="' + esc(nom.id) + '">Ya lo hice</button></div></div></div>';
+    traspasosPendientes(t).forEach(function (x) {
+      h += '<div class="alert info"><span class="ico">!</span><div class="grow">' + (x.fecha === t ? 'Hoy' : 'El ' + fCorta(x.fecha)) + ' se cobra «' + esc(x.concepto) + '»: pasa <b>' + fmt(x.importe) + '</b> de ' + esc(nombreCuenta(x.desde)) + ' a ' + esc(nombreCuenta(x.hacia)) + ' en tu banco. La app ya lo ha apuntado.' +
+        '<div style="margin-top:8px"><button class="btn small primary" data-act="traspaso-ok" data-id="' + esc(x.id) + '">Hecho</button></div></div></div>';
+    });
     var anteriores = C.fijosAnteriores(V, ciclo);
     if (anteriores.length) {
       h += '<div class="alert info"><span class="ico">!</span><div class="grow">Hay ' + anteriores.length + ' cargo(s) fijo(s) de este ciclo anteriores a que empezaras a usar Hucha: ' +
@@ -279,7 +305,12 @@
     // Próximos cargos
     var prox = [];
     (V.fijos || []).forEach(function (f) {
-      C.ocurrencias(f, t, C.addDays(t, 10)).forEach(function (d) { prox.push({ f: f, d: d }); });
+      C.ocurrencias(f, t, C.addDays(t, 10)).forEach(function (d) {
+        prox.push({ f: f, d: d });
+        if (f.financiaDesde && V.config.cuentaSobrante && f.financiaDesde !== V.config.cuentaSobrante) {
+          prox.push({ f: { tipo: 'transferencia', concepto: 'Pasar de ' + nombreCuenta(f.financiaDesde) + ' a ' + nombreCuenta(V.config.cuentaSobrante) + ' (hazlo tú)', importe: f.importe, cuenta: f.financiaDesde, destino: V.config.cuentaSobrante }, d: d });
+        }
+      });
     });
     prox.sort(function (a, b) { return a.d < b.d ? -1 : 1; });
     if (prox.length) {
@@ -1258,6 +1289,7 @@
     else if (act === 'debo-nuevo') abrirDebo(null);
     else if (act === 'debo-ok') { if (confirm('¿Ya le has pagado? Se quitará de la lista.')) { commit([{ op: 'borrarDebo', id: id }]); toast('Quitado de la lista'); } }
     else if (act === 'reparto') abrirReparto(id);
+    else if (act === 'traspaso-ok') { LS.set('traspasoHecho.' + id, true); render(); }
     else if (act === 'reparto-no') { LS.set('repartoHecho.' + id, true); render(); }
     else if (act === 'fijo') { var fj = (V.fijos || []).filter(function (x) { return x.id === id; })[0]; if (fj) abrirFijo(fj); }
     else if (act === 'fijo-nuevo') abrirFijo(null);
