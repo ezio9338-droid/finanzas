@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.8.0';
+  var VERSION = '1.9.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -235,19 +235,27 @@
 
     al.forEach(function (a) { h += '<div class="alert ' + a.nivel + '"><span class="ico">' + (a.nivel === 'warning' ? '!' : a.nivel === 'serious' ? '!' : '×') + '</span><div>' + esc(a.texto) + '</div></div>'; });
 
-    // Ahorro
-    var ap = p.ahorroPrevisto, obj = p.ahorroObjetivo, r = obj > 0 ? Math.max(0, Math.min(1, ap / obj)) : 0;
-    var inv = C.r2(Math.max(0, p.sobrantePrevisto) * p.repartoInversion / 100), rem = C.r2(Math.max(0, p.sobrantePrevisto) - inv);
-    h += '<div class="card"><h2>Ahorro de este ciclo<span class="right muted">objetivo ' + fmt(obj) + '</span></h2>' +
-      '<div class="row"><div><div class="hero-label">' + (p.transcurridos >= 7 ? 'A este ritmo ahorrarás' : 'Si cumples el presupuesto ahorrarás') + '</div>' +
-      '<div style="font-size:28px;font-weight:700;letter-spacing:-.02em" class="num">' + fmt(ap) + '</div></div>' +
-      '<div class="small ' + (ap >= obj ? 'amount pos' : 'muted') + '">' + (ap >= obj ? '✓ objetivo' : Math.round(r * 100) + ' % del objetivo') + '</div></div>' +
-      '<div class="bar thin"><div class="fill ' + (ap >= obj ? 'good' : 'serious') + '" style="width:' + (r * 100) + '%"></div></div>' +
-      '<ul class="list small" style="margin-top:8px">' +
-      (p.pension > 0 ? '<li><span class="grow sec">Plan de pensiones</span><span class="amount num">' + fmt(p.pension) + '</span></li>' : '') +
-      '<li><span class="grow sec">Sobrante al cobrar → Inversión ' + p.repartoInversion + ' %</span><span class="amount num">' + fmt(inv) + '</span></li>' +
-      '<li><span class="grow sec">Sobrante al cobrar → Remunerada ' + (100 - p.repartoInversion) + ' %</span><span class="amount num">' + fmt(rem) + '</span></li>' +
-      '</ul></div>';
+    // Ahorro: desglose del saldo real de la cuenta diaria
+    var ar = C.ahorroReal(V, p, t), obj = p.ahorroObjetivo;
+    if (ar) {
+      var aho = ar.ahorro, rr = obj > 0 ? Math.max(0, Math.min(1, aho / obj)) : 0, okObj = aho >= obj - 0.5;
+      var inv = C.r2(Math.max(0, aho) * p.repartoInversion / 100), rem = C.r2(Math.max(0, aho) - inv);
+      h += '<div class="card"><h2>Ahorro de este ciclo<span class="right muted">objetivo ' + fmt(obj) + '</span></h2>' +
+        '<div class="row"><div><div class="hero-label">Al cobrar podrás repartir</div>' +
+        '<div style="font-size:30px;font-weight:600;letter-spacing:-.02em" class="num">' + fmtGrande(aho) + '</div></div>' +
+        '<div class="small ' + (okObj ? 'amount pos' : 'muted') + '">' + (okObj ? '✓ objetivo' : Math.round(rr * 100) + ' % del objetivo') + '</div></div>' +
+        '<div class="bar thin"><div class="fill ' + (okObj ? 'good' : 'serious') + '" style="width:' + (rr * 100) + '%"></div></div>' +
+        '<p class="small muted" style="margin:6px 0 4px">Si gastas exactamente lo que te queda. Sale de tu saldo real de ' + esc(nombreCuenta(ar.cuenta)) + ':</p>' +
+        '<ul class="list small">' +
+        '<li><span class="grow sec">' + esc(nombreCuenta(ar.cuenta)) + ' hoy</span><span class="amount num">' + fmt(ar.saldo) + '</span></li>' +
+        (ar.deuda ? '<li><span class="grow sec">− Tarjeta de crédito (se cobra el día 1)</span><span class="amount num">−' + fmt(ar.deuda) + '</span></li>' : '') +
+        (ar.pendientes ? '<li><span class="grow sec">− Fijos que aún saldrán de ' + esc(nombreCuenta(ar.cuenta)) + '</span><span class="amount num">' + (ar.pendientes > 0 ? '−' : '+') + fmt(Math.abs(ar.pendientes)) + '</span></li>' : '') +
+        '<li><span class="grow sec">− Lo que te queda para gastar</span><span class="amount num">−' + fmt(ar.queda) + '</span></li>' +
+        '<li><span class="grow"><b>= Ahorro</b> → Inversión ' + p.repartoInversion + ' % · Remunerada ' + (100 - p.repartoInversion) + ' %</span><span class="amount num">' + fmt(inv) + ' · ' + fmt(rem) + '</span></li>' +
+        '</ul>' +
+        (!okObj && aho < obj - 5 ? '<p class="small" style="color:var(--warning);margin:6px 0 0">Te faltan ' + fmt(obj - aho) + ' para el objetivo. Suele ser un gasto sin apuntar o un pago del mes anterior (p. ej. la tarjeta) hecho con esta nómina.</p>' : '') +
+        '</div>';
+    }
 
     if (meDeben > 0) {
       h += '<button class="card debts-card" data-act="ir" data-id="deudas"><span class="inline" style="gap:10px">' + ico('users') + ' Te ' + (deudores.length === 1 ? 'debe ' + esc(deudores[0].persona) : 'deben ' + deudores.length + ' personas') + '</span><b class="amount pos num">' + fmt(meDeben) + '</b><span class="muted">›</span></button>';

@@ -532,6 +532,39 @@ var HuchaCore = (function () {
 
   function indexById(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return i; return -1; }
 
+  // ---------- Ahorro real (a partir del saldo de la cuenta diaria) ----------
+  /**
+   * Reparte el saldo actual de la cuenta diaria (cuentaSobrante) en:
+   *  deuda de la tarjeta (actual + fijos que aún se le cargarán este ciclo),
+   *  otros fijos pendientes de esa cuenta, lo que te queda por gastar y, lo que sobra, el ahorro.
+   * Es lo que podrás repartir al cobrar si gastas exactamente lo que te queda.
+   */
+  function ahorroReal(state, p, hoy) {
+    var cfg = state.config || {}, sob = cfg.cuentaSobrante, tarj = cfg.tarjetaSobrante;
+    if (!sob) return null;
+    var s = saldos(state), ciclo = p.ciclo;
+    var deuda = tarj ? Math.max(0, -(s[tarj] || 0)) : 0, pendientes = 0;
+    var registrados = {};
+    (state.movimientos || []).forEach(function (m) { registrados[m.id] = true; });
+    (state.fijos || []).forEach(function (f) {
+      if (f.modo === 'liquidar' || (f.tipo === 'transferencia' && f.destino === tarj)) return;
+      ocurrencias(f, ciclo.inicio, ciclo.fin).forEach(function (d) {
+        if (registrados['f-' + f.id + '-' + d]) return;
+        var imp = num(f.importe);
+        if (f.tipo === 'gasto' && f.cuenta === tarj) deuda += imp;
+        else if (f.tipo === 'gasto' && f.cuenta === sob) pendientes += imp;
+        else if (f.tipo === 'ingreso' && f.cuenta === sob) pendientes -= imp;
+        else if (f.tipo === 'transferencia' && f.cuenta === sob) pendientes += imp;
+      });
+    });
+    var queda = Math.max(0, p.restante);
+    var saldo = s[sob] || 0;
+    return {
+      cuenta: sob, saldo: r2(saldo), deuda: r2(deuda), pendientes: r2(pendientes), queda: r2(queda),
+      ahorro: r2(saldo - deuda - pendientes - queda)
+    };
+  }
+
   // ---------- Cargos fijos anteriores a empezar ----------
   /**
    * Cargos de fijos que cuentan en presupuesto y caen entre el inicio del ciclo y el día en que
@@ -683,7 +716,7 @@ var HuchaCore = (function () {
     r2: r2, num: num, fmt: fmt, uid: uid, redondeo: redondeo, interesDiario: interesDiario,
     saldos: saldos, patrimonio: patrimonio, ciclos: ciclos, cicloDe: cicloDe, ocurrencias: ocurrencias,
     presupuesto: presupuesto, alertas: alertas, pendientesCobro: pendientesCobro, propuestaNomina: propuestaNomina,
-    fijosAnteriores: fijosAnteriores, REDONDEOS: REDONDEOS, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
+    fijosAnteriores: fijosAnteriores, REDONDEOS: REDONDEOS, ahorroReal: ahorroReal, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
     procesarAutomaticos: procesarAutomaticos, aplicarOps: aplicarOps, estadisticas: estadisticas,
     categoriasBase: categoriasBase, estadoEjemplo: estadoEjemplo, parteMia: parteMia
   };
