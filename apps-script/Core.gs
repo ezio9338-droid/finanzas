@@ -551,7 +551,7 @@ var HuchaCore = (function () {
     var cfg = state.config || {}, sob = cfg.cuentaSobrante, tarj = cfg.tarjetaSobrante;
     if (!sob) return null;
     var s = saldos(state), ciclo = p.ciclo;
-    var deuda = tarj ? Math.max(0, -(s[tarj] || 0)) : 0, pendientes = 0;
+    var deudaActual = tarj ? Math.max(0, -(s[tarj] || 0)) : 0, deuda = deudaActual, pendientes = 0, cargosTarjeta = [];
     var registrados = {};
     (state.movimientos || []).forEach(function (m) { registrados[m.id] = true; });
     (state.fijos || []).forEach(function (f) {
@@ -559,7 +559,7 @@ var HuchaCore = (function () {
       ocurrencias(f, ciclo.inicio, ciclo.fin).forEach(function (d) {
         if (registrados['f-' + f.id + '-' + d]) return;
         var imp = num(f.importe);
-        if (f.tipo === 'gasto' && f.cuenta === tarj) deuda += imp;
+        if (f.tipo === 'gasto' && f.cuenta === tarj) { deuda += imp; cargosTarjeta.push({ concepto: f.concepto, fecha: d, importe: imp }); }
         else if (f.tipo === 'gasto' && f.cuenta === sob) pendientes += imp;
         else if (f.tipo === 'ingreso' && f.cuenta === sob) pendientes -= imp;
         else if (f.tipo === 'transferencia' && f.cuenta === sob) pendientes += imp;
@@ -568,7 +568,7 @@ var HuchaCore = (function () {
     var queda = Math.max(0, p.restante);
     var saldo = s[sob] || 0;
     return {
-      cuenta: sob, saldo: r2(saldo), deuda: r2(deuda), pendientes: r2(pendientes), queda: r2(queda),
+      cuenta: sob, saldo: r2(saldo), deuda: r2(deuda), deudaActual: r2(deudaActual), cargosTarjeta: cargosTarjeta, pendientes: r2(pendientes), queda: r2(queda),
       ahorro: r2(saldo - deuda - pendientes - queda)
     };
   }

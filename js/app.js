@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.10.0';
+  var VERSION = '1.10.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -248,7 +248,10 @@
         '<p class="small muted" style="margin:6px 0 4px">Si gastas exactamente lo que te queda. Sale de tu saldo real de ' + esc(nombreCuenta(ar.cuenta)) + ':</p>' +
         '<ul class="list small">' +
         '<li><span class="grow sec">' + esc(nombreCuenta(ar.cuenta)) + ' hoy</span><span class="amount num">' + fmt(ar.saldo) + '</span></li>' +
-        (ar.deuda ? '<li><span class="grow sec">− Tarjeta de crédito (se cobra el día 1)</span><span class="amount num">−' + fmt(ar.deuda) + '</span></li>' : '') +
+        (ar.deuda ? '<li><span class="grow sec">− Tarjeta de crédito, se paga el día 1' +
+          '<div class="subline">' + (ar.deudaActual ? 'debes ' + fmt(ar.deudaActual) : 'no debes nada aún') +
+          (ar.cargosTarjeta.length ? ' + aún se cargarán ' + esc(ar.cargosTarjeta.map(function (c) { return c.concepto + ' ' + C.fmt(c.importe); }).join(', ')) : '') +
+          '</div></span><span class="amount num">−' + fmt(ar.deuda) + '</span></li>' : '') +
         (ar.pendientes ? '<li><span class="grow sec">− Fijos que aún saldrán de ' + esc(nombreCuenta(ar.cuenta)) + '</span><span class="amount num">' + (ar.pendientes > 0 ? '−' : '+') + fmt(Math.abs(ar.pendientes)) + '</span></li>' : '') +
         '<li><span class="grow sec">− Lo que te queda para gastar</span><span class="amount num">−' + fmt(ar.queda) + '</span></li>' +
         '<li><span class="grow"><b>= Ahorro</b> → Inversión ' + p.repartoInversion + ' % · Remunerada ' + (100 - p.repartoInversion) + ' %</span><span class="amount num">' + fmt(inv) + ' · ' + fmt(rem) + '</span></li>' +
