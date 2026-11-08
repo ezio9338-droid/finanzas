@@ -2,16 +2,21 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.5.0';
+  var VERSION = '1.6.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
-  var ICONO_CUENTA = { diario: '🏦', efectivo: '💵', pocket: '🫙', ahorro: '📈', inversion: '📊', pension: '🧓', credito: '💳' };
+  var IK = HuchaIconos;
+  var ICONO_CUENTA = { diario: 'bank', efectivo: 'cash', pocket: 'jar', ahorro: 'piggy', inversion: 'chart', pension: 'shield', credito: 'card' };
+  function icoCuenta(tipo) { return IK.svg(ICONO_CUENTA[tipo] || 'bank'); }
+  function ico(n) { return IK.svg(n); }
 
   // ---------------------------------------------------------------- utilidades
   function $(s, r) { return (r || document).querySelector(s); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmt(x) { return C.fmt(x); }
+  /** Importe grande con los céntimos en pequeño: 412<small>,80 €</small> */
+  function fmtGrande(x) { var t = C.fmt(x), i = t.lastIndexOf(','); return i < 0 ? esc(t) : esc(t.slice(0, i)) + '<small>' + esc(t.slice(i)) + '</small>'; }
   function hoy() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   function fCorta(s) { var d = C.parseISO(s); return d.getUTCDate() + ' ' + MESES[d.getUTCMonth()]; }
   function fLarga(s) {
@@ -150,7 +155,7 @@
   function nombreCuenta(id) { var c = cuenta(id); return c ? c.nombre : (id || '—'); }
   function iconoCat(cat) {
     var c = (V.categorias || []).filter(function (x) { return x.cat === cat && !x.sub; })[0];
-    return c && c.icono ? c.icono : '•';
+    return IK.svg(c && c.icono ? c.icono : 'tag');
   }
   function cicloActual() { var cs = C.ciclos(V, hoy()); return cs[cs.length - 1]; }
   function nominaPendienteDeReparto() {
@@ -205,10 +210,10 @@
     if (modo() === 'online' && !caja) al.unshift({ nivel: 'serious', texto: 'Este dispositivo aún no está protegido. Ve a Ajustes → Seguridad.' });
 
     var pct = Math.max(0, p.pct), cls = pct >= 1 ? 'critical' : pct >= 0.8 ? 'serious' : '';
-    h += '<div class="card">' +
+    h += '<div class="card hero-card">' +
       '<div class="row small sec"><span>Ciclo ' + fCorta(ciclo.inicio) + ' → ' + fCorta(ciclo.fin) + (ciclo.estimado ? '*' : '') + '</span><span>día ' + p.transcurridos + ' de ' + p.dias + '</span></div>' +
       '<div class="hero-label" style="margin-top:10px">' + (p.restante >= 0 ? 'Te quedan para gastar' : 'Te has pasado') + '</div>' +
-      '<div class="hero num' + (p.restante < 0 ? ' neg' : '') + '">' + fmt(Math.abs(p.restante)) + '</div>' +
+      '<div class="hero num' + (p.restante < 0 ? ' neg' : '') + '">' + fmtGrande(Math.abs(p.restante)) + '</div>' +
       '<div class="sec">' + (p.restante > 0 ? '≈ <b>' + fmt(p.porDia) + '</b> al día durante ' + p.diasRestantes + ' días' : 'Intenta no gastar más hasta la nómina') + '</div>' +
       '<div class="bar" role="progressbar" aria-valuenow="' + Math.round(pct * 100) + '" aria-valuemin="0" aria-valuemax="100"><div class="fill ' + cls + '" style="width:' + Math.min(100, pct * 100) + '%"></div><div class="mark" style="left:calc(' + (p.ritmo * 100) + '% - 1px)" title="Ritmo ideal"></div></div>' +
       '<div class="row small"><span class="sec">Gastado <b class="num">' + fmt(p.gastado) + '</b> de ' + fmt(p.disponible) + '</span><span class="muted">▏ritmo ideal ' + Math.round(p.ritmo * 100) + ' %</span></div>' +
@@ -238,7 +243,7 @@
       '</ul></div>';
 
     if (meDeben > 0) {
-      h += '<button class="card debts-card" data-act="ir" data-id="deudas"><span>👥 Te ' + (deudores.length === 1 ? 'debe ' + esc(deudores[0].persona) : 'deben ' + deudores.length + ' personas') + '</span><b class="amount pos num">' + fmt(meDeben) + '</b><span class="muted">›</span></button>';
+      h += '<button class="card debts-card" data-act="ir" data-id="deudas"><span class="inline" style="gap:10px">' + ico('users') + ' Te ' + (deudores.length === 1 ? 'debe ' + esc(deudores[0].persona) : 'deben ' + deudores.length + ' personas') + '</span><b class="amount pos num">' + fmt(meDeben) + '</b><span class="muted">›</span></button>';
     }
 
     // Categorías
@@ -248,7 +253,7 @@
       h += '<div class="card"><h2>Por categoría</h2>' + cats.map(function (c) {
         var rr = c.presupuesto > 0 ? c.gastado / c.presupuesto : (c.gastado > 0 ? 1 : 0);
         var k = rr >= 1 ? 'critical' : rr >= 0.8 ? 'serious' : '';
-        return '<div class="catrow"><div class="row"><span>' + esc(c.icono) + ' ' + esc(c.cat) + '</span><span class="num sec">' + fmt(c.gastado) + (c.presupuesto ? ' <span class="muted">/ ' + fmt(c.presupuesto) + '</span>' : '') + '</span></div>' +
+        return '<div class="catrow"><div class="row"><span class="catname">' + IK.svg(c.icono || 'tag') + esc(c.cat) + '</span><span class="num sec">' + fmt(c.gastado) + (c.presupuesto ? ' <span class="muted">/ ' + fmt(c.presupuesto) + '</span>' : '') + '</span></div>' +
           (c.presupuesto ? '<div class="bar thin"><div class="fill ' + k + '" style="width:' + Math.min(100, Math.max(0, rr) * 100) + '%"></div><div class="mark" style="left:calc(' + (p.ritmo * 100) + '% - 1px)"></div></div>' : '') + '</div>';
       }).join('') + '</div>';
     }
@@ -263,7 +268,7 @@
       h += '<div class="card"><h2>Próximos 10 días</h2><ul class="list">' + prox.map(function (x) {
         var signo = x.f.tipo === 'ingreso' ? '+' : x.f.tipo === 'transferencia' ? '' : '−';
         var imp = x.f.modo === 'liquidar' ? 'saldo tarjeta' : signo + fmt(x.f.importe);
-        return '<li><span class="avatar">' + (x.f.tipo === 'transferencia' ? '⇄' : x.f.tipo === 'ingreso' ? '↘' : iconoCat(x.f.cat)) + '</span><div class="grow"><div class="title">' + esc(x.f.concepto) + '</div><div class="subline">' + fLarga(x.d) + ' · ' + esc(nombreCuenta(x.f.cuenta)) + (x.f.destino ? ' → ' + esc(nombreCuenta(x.f.destino)) : '') + '</div></div><span class="amount ' + (x.f.tipo === 'ingreso' ? 'pos' : x.f.tipo === 'transferencia' ? 'tr' : 'neg') + '">' + imp + '</span></li>';
+        return '<li><span class="avatar">' + (x.f.tipo === 'transferencia' ? ico('transfer') : x.f.tipo === 'ingreso' ? ico('arrowIn') : iconoCat(x.f.cat)) + '</span><div class="grow"><div class="title">' + esc(x.f.concepto) + '</div><div class="subline">' + fLarga(x.d) + ' · ' + esc(nombreCuenta(x.f.cuenta)) + (x.f.destino ? ' → ' + esc(nombreCuenta(x.f.destino)) : '') + '</div></div><span class="amount ' + (x.f.tipo === 'ingreso' ? 'pos' : x.f.tipo === 'transferencia' ? 'tr' : 'neg') + '">' + imp + '</span></li>';
       }).join('') + '</ul></div>';
     }
 
@@ -278,7 +283,7 @@
       var tot = grupos[g].reduce(function (a, c) { return a + (s[c.id] || 0); }, 0);
       h += '<div class="group-title row"><span>' + g + '</span><span class="num">' + fmt(tot) + '</span></div><ul class="list">' + grupos[g].map(function (c) {
         var extra = c.tae ? (c.tae + ' % TAE · ≈ ' + fmt(C.interesDiario(s[c.id], C.num(c.tae), C.num(c.retencion))) + '/día netos') : c.redondeoA ? 'redondeo → ' + esc(nombreCuenta(c.redondeoA)) : '';
-        return '<li class="tap" data-act="cuenta" data-id="' + esc(c.id) + '"><span class="avatar">' + (ICONO_CUENTA[c.tipo] || '🏦') + '</span><div class="grow"><div class="title">' + esc(c.nombre) + '</div>' + (extra ? '<div class="subline">' + extra + '</div>' : '') + '</div><span class="amount num' + ((s[c.id] || 0) < 0 ? ' neg' : '') + '">' + fmt(s[c.id] || 0) + '</span></li>';
+        return '<li class="tap" data-act="cuenta" data-id="' + esc(c.id) + '"><span class="avatar">' + icoCuenta(c.tipo) + '</span><div class="grow"><div class="title">' + esc(c.nombre) + '</div>' + (extra ? '<div class="subline">' + extra + '</div>' : '') + '</div><span class="amount num' + ((s[c.id] || 0) < 0 ? ' neg' : '') + '">' + fmt(s[c.id] || 0) + '</span></li>';
       }).join('') + '</ul>';
     });
     h += '</div>';
@@ -288,10 +293,10 @@
   // ---------- Movimientos ----------
   function filaMov(m, hijos) {
     var tipo = m.tipo, icon, titulo, sub = [], cls, imp;
-    if (tipo === 'transferencia') { icon = '⇄'; titulo = m.nota || 'Transferencia'; sub.push(esc(nombreCuenta(m.cuenta)) + ' → ' + esc(nombreCuenta(m.destino))); cls = 'tr'; imp = fmt(m.importe); }
-    else if (tipo === 'ajuste') { icon = '⚖️'; titulo = 'Ajuste de saldo'; sub.push(esc(nombreCuenta(m.cuenta))); cls = m.importe >= 0 ? 'pos' : ''; imp = (m.importe >= 0 ? '+' : '') + fmt(m.importe); }
+    if (tipo === 'transferencia') { icon = ico('transfer'); titulo = m.nota || 'Transferencia'; sub.push(esc(nombreCuenta(m.cuenta)) + ' → ' + esc(nombreCuenta(m.destino))); cls = 'tr'; imp = fmt(m.importe); }
+    else if (tipo === 'ajuste') { icon = ico('scale'); titulo = 'Ajuste de saldo'; sub.push(esc(nombreCuenta(m.cuenta))); cls = m.importe >= 0 ? 'pos' : ''; imp = (m.importe >= 0 ? '+' : '') + fmt(m.importe); }
     else if (tipo === 'ingreso') {
-      icon = m.nomina ? '💼' : m.origen === 'interes' ? '📈' : m.pagaDeuda ? '💸' : m.reembolso ? '↩️' : '💶';
+      icon = ico(m.nomina ? 'briefcase' : m.origen === 'interes' ? 'chart' : m.pagaDeuda ? 'handcoins' : m.reembolso ? 'undo' : 'arrowIn');
       titulo = m.nomina ? 'Nómina' : (m.sub || m.cat || 'Ingreso'); if (m.reembolso) titulo = 'Reembolso' + (m.sub ? ' · ' + m.sub : '');
       if (m.pagaDeuda) titulo = 'Pago de ' + m.pagaDeuda;
       sub.push(esc(nombreCuenta(m.cuenta))); if (m.nota && m.nota !== titulo) sub.push(esc(m.nota)); cls = 'pos'; imp = '+' + fmt(m.importe);
@@ -371,7 +376,7 @@
     var cats = Object.keys(s.porCategoria).map(function (k) { return { cat: k, v: s.porCategoria[k] }; }).filter(function (x) { return x.v > 0; }).sort(function (a, b) { return b.v - a.v; });
     var max = cats.length ? cats[0].v : 1;
     h += '<div class="card"><h2>Gasto por categoría</h2>' + (cats.length ? cats.map(function (c) {
-      return '<div class="catrow" data-tip="' + esc(c.cat + '\n' + fmt(c.v) + ' · ' + Math.round(c.v / s.gastos * 100) + ' % del gasto') + '"><div class="row small"><span>' + esc(iconoCat(c.cat)) + ' ' + esc(c.cat || 'Sin categoría') + '</span><span class="num sec">' + fmt(c.v) + '</span></div><div class="bar thin"><div class="fill" style="width:' + (c.v / max * 100) + '%"></div></div></div>';
+      return '<div class="catrow" data-tip="' + esc(c.cat + '\n' + fmt(c.v) + ' · ' + Math.round(c.v / s.gastos * 100) + ' % del gasto') + '"><div class="row small"><span class="catname">' + iconoCat(c.cat) + esc(c.cat || 'Sin categoría') + '</span><span class="num sec">' + fmt(c.v) + '</span></div><div class="bar thin"><div class="fill" style="width:' + (c.v / max * 100) + '%"></div></div></div>';
     }).join('') : '<div class="empty-state">Sin gastos en este ciclo.</div>') + '</div>';
 
     var ult = stats.slice(-12), labels = ult.map(etiquetaCiclo);
@@ -398,13 +403,13 @@
   }
 
   // ---------- Categorías ----------
-  var EMOJIS = ['🛒', '🍽', '☕', '⛽', '🚗', '🏠', '💡', '🔁', '💻', '📱', '💪', '💊', '🎉', '✈️', '🎮', '📚', '👕', '💅', '🎁', '🐶', '👶', '🎓', '💳', '📦', '💶', '💼', '📈', '🏦'];
+  var ICONOS_CAT = HuchaIconos.ELEGIBLES;
   var SUBS_FIJAS = ['Nómina', 'Intereses'];
   function abrirCategoria(nombre, tipo) {
     var nuevo = !nombre;
     var cab = nuevo ? null : (V.categorias || []).filter(function (c) { return c.cat === nombre && c.tipo === tipo && !c.sub; })[0];
     var st = {
-      tipo: tipo || 'gasto', antes: nombre || '', cat: nombre || '', icono: cab ? cab.icono || '' : '',
+      tipo: tipo || 'gasto', antes: nombre || '', cat: nombre || '', icono: cab ? (IK.clave(cab.icono) || cab.icono || 'tag') : 'tag',
       presupuesto: cab && cab.presupuesto !== '' && cab.presupuesto != null ? String(cab.presupuesto).replace('.', ',') : '',
       subs: nuevo ? [] : subsDe(nombre).map(function (sb) { return { antes: sb, nombre: sb }; })
     };
@@ -412,15 +417,14 @@
     function pintar() {
       var h = '<h3>' + (nuevo ? 'Nueva categoría' : 'Editar categoría') + '</h3>';
       if (nuevo) h += '<div class="seg"><button data-c="tipo" data-v="gasto" class="' + (st.tipo === 'gasto' ? 'on' : '') + '">De gasto</button><button data-c="tipo" data-v="ingreso" class="' + (st.tipo === 'ingreso' ? 'on' : '') + '">De ingreso</button></div>';
-      h += '<div class="inline" style="margin-top:8px;align-items:flex-end"><label class="field" style="flex:0 0 76px"><span>Icono</span><input class="input" data-c="icono" maxlength="8" style="text-align:center;font-size:22px" value="' + esc(st.icono) + '"></label>' +
-        '<label class="field"><span>Nombre</span><input class="input" data-c="cat" maxlength="40" value="' + esc(st.cat) + '"' + (esIngresos ? ' disabled' : '') + '></label></div>';
-      h += '<div class="chips">' + EMOJIS.map(function (e) { return '<button class="chip' + (st.icono === e ? ' on' : '') + '" data-c="emoji" data-v="' + e + '">' + e + '</button>'; }).join('') + '</div>';
+      h += '<label class="field" style="margin-top:8px"><span>Nombre</span><input class="input" data-c="cat" maxlength="40" value="' + esc(st.cat) + '"' + (esIngresos ? ' disabled' : '') + '></label>';
+      h += '<div class="small sec">Icono</div><div class="icongrid">' + ICONOS_CAT.map(function (k) { return '<button class="iconpick' + (IK.clave(st.icono) === k ? ' on' : '') + '" data-c="emoji" data-v="' + k + '" aria-label="' + k + '">' + IK.svg(k) + '</button>'; }).join('') + '</div>';
       if (st.tipo === 'gasto') h += '<label class="field"><span>Presupuesto mensual (gastos variables)</span><input class="input num" data-c="presupuesto" inputmode="decimal" placeholder="sin límite" value="' + esc(st.presupuesto) + '"></label>';
       h += '<div class="small sec" style="margin-top:10px">Subcategorías</div>';
       st.subs.forEach(function (sb, i) {
         var fija = esIngresos && SUBS_FIJAS.indexOf(sb.antes) >= 0;
         h += '<div class="inline" style="margin-top:6px"><input class="input" data-s="' + i + '" maxlength="40" value="' + esc(sb.nombre) + '"' + (fija ? ' disabled' : '') + '>' +
-          (fija ? '<span class="small muted" style="width:44px;text-align:center">🔒</span>' : '<button class="btn small" data-c="quitar" data-v="' + i + '" aria-label="Quitar">✕</button>') + '</div>';
+          (fija ? '<span class="small muted" style="width:44px;text-align:center">' + ico('lock') + '</span>' : '<button class="btn small" data-c="quitar" data-v="' + i + '" aria-label="Quitar">✕</button>') + '</div>';
       });
       h += '<button class="btn small" data-c="add" style="margin-top:8px">＋ Añadir subcategoría</button>';
       if (!nuevo) h += '<p class="small muted">Si cambias un nombre, se cambia también en los movimientos y gastos fijos que ya lo usan.</p>';
@@ -478,20 +482,20 @@
     var ds = C.deudas(V), activos = ds.filter(function (d) { return d.pendiente > 0.004; }), saldados = ds.filter(function (d) { return d.pendiente <= 0.004; });
     var total = C.totalMeDeben(V);
     if (!puedeDeudas()) h += '<div class="alert serious"><span class="ico">!</span><div>Para repartir gastos entre personas, actualiza el Apps Script (te lo explico en el chat). Mientras, aquí ves los gastos compartidos antiguos.</div></div>';
-    h += '<div class="card"><div class="hero-label">Te deben en total</div><div class="hero num" style="font-size:34px;color:var(--pos-text)">' + fmt(total) + '</div>' +
+    h += '<div class="card hero-card"><div class="hero-label">Te deben en total</div><div class="hero num" style="font-size:40px">' + fmtGrande(total) + '</div>' +
       '<p class="small muted" style="margin:4px 0 0">Cuando te paguen: ＋ → Ingreso → «Salda una deuda», o toca la persona y pulsa «Me ha pagado».</p></div>';
     h += '<div class="card"><h2>Me deben</h2>' + (activos.length ? '<ul class="list">' + activos.map(function (d) {
       var p = d.items[0], mas = d.items.length - 1;
       var info = p ? esc(p.deuda.concepto || 'Gasto compartido') + ' · ' + fCorta(p.deuda.fecha) + (mas > 0 ? ' y ' + mas + ' más' : '') : '';
       if (d.pagado > 0) info += ' · ya pagó ' + fmt(d.pagado);
-      return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">' + (d.persona === C.SIN_ASIGNAR ? '❔' : '👤') + '</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">' + info + '</div></div><span class="amount pos">' + fmt(d.pendiente) + '</span><span class="muted">›</span></li>';
-    }).join('') + '</ul>' : '<div class="empty-state">Nadie te debe nada 🎉</div>') + '</div>';
+      return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">' + ico(d.persona === C.SIN_ASIGNAR ? 'question' : 'user') + '</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">' + info + '</div></div><span class="amount pos">' + fmt(d.pendiente) + '</span><span class="muted">›</span></li>';
+    }).join('') + '</ul>' : '<div class="empty-state">Nadie te debe nada</div>') + '</div>';
 
     var debo = (V.debo || []).slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
     var totalDebo = debo.reduce(function (a, d) { return a + C.num(d.importe); }, 0);
     h += '<div class="card"><h2>Debo<span class="right">' + (totalDebo ? fmt(totalDebo) : 'Recordatorio') + '</span></h2>' +
       (debo.length ? '<ul class="list">' + debo.map(function (d) {
-        return '<li><span class="avatar">🧾</span><div class="grow tap" data-act="debo" data-id="' + esc(d.id) + '"><div class="title">A ' + esc(d.persona) + '</div><div class="subline">' + esc(d.concepto || '') + (d.concepto ? ' · ' : '') + fCorta(d.fecha) + '</div></div>' +
+        return '<li><span class="avatar">' + ico('receipt') + '</span><div class="grow tap" data-act="debo" data-id="' + esc(d.id) + '"><div class="title">A ' + esc(d.persona) + '</div><div class="subline">' + esc(d.concepto || '') + (d.concepto ? ' · ' : '') + fCorta(d.fecha) + '</div></div>' +
           (d.importe !== '' && d.importe != null ? '<span class="amount neg">' + fmt(d.importe) + '</span>' : '') +
           '<button class="btn small" data-act="debo-ok" data-id="' + esc(d.id) + '">Pagado</button></li>';
       }).join('') + '</ul>' : '<p class="small muted" style="margin-top:0">Apunta aquí lo que debes tú, para no olvidarte. No afecta a tus saldos.</p>') +
@@ -499,7 +503,7 @@
 
     if (saldados.length) {
       h += '<div class="card"><h2>Saldadas</h2><ul class="list">' + saldados.map(function (d) {
-        return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">✅</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">Te pagó ' + fmt(d.pagado) + ' en total</div></div><span class="muted">›</span></li>';
+        return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">' + ico('check') + '</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">Te pagó ' + fmt(d.pagado) + ' en total</div></div><span class="muted">›</span></li>';
       }).join('') + '</ul></div>';
     }
     return h;
@@ -508,7 +512,7 @@
   function abrirPersona(nombre) {
     var d = C.deudas(V).filter(function (x) { return C.clavePersona(x.persona) === C.clavePersona(nombre); })[0];
     if (!d) return;
-    var h = '<h3>👤 ' + esc(d.persona) + '</h3>' +
+    var h = '<h3 class="catname">' + ico('user') + esc(d.persona) + '</h3>' +
       '<div class="hero num" style="font-size:32px;color:' + (d.pendiente > 0 ? 'var(--pos-text)' : 'var(--text)') + '">' + fmt(Math.max(0, d.pendiente)) + '</div>' +
       '<p class="small muted" style="margin-top:0">' + (d.pendiente > 0 ? 'te debe' : 'está al día') + ' · total ' + fmt(d.total) + ' · pagado ' + fmt(d.pagado) + '</p>';
     if (d.pendiente > 0 && d.persona !== C.SIN_ASIGNAR) h += '<button class="btn primary block" id="p-pago">Me ha pagado</button>';
@@ -518,7 +522,7 @@
     }).join('') + '</ul>';
     if (d.pagos.length) {
       h += '<div class="group-title">Pagos recibidos</div><ul class="list">' + d.pagos.slice().sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }).map(function (m) {
-        return '<li class="tap" data-mov="' + esc(m.id) + '"><span class="avatar">💸</span><div class="grow"><div class="title">' + fLarga(m.fecha) + '</div><div class="subline">' + esc(nombreCuenta(m.cuenta)) + (m.nota ? ' · ' + esc(m.nota) : '') + '</div></div><span class="amount pos">+' + fmt(m.importe) + '</span></li>';
+        return '<li class="tap" data-mov="' + esc(m.id) + '"><span class="avatar">' + ico('handcoins') + '</span><div class="grow"><div class="title">' + fLarga(m.fecha) + '</div><div class="subline">' + esc(nombreCuenta(m.cuenta)) + (m.nota ? ' · ' + esc(m.nota) : '') + '</div></div><span class="amount pos">+' + fmt(m.importe) + '</span></li>';
       }).join('') + '</ul>';
     }
     abrirHoja(h, function (el) {
@@ -575,7 +579,7 @@
     h += '<div class="card"><h2>Presupuesto por categoría<span class="right">' + fmt(sumCats) + ' de ' + fmt(p.disponible) + '</span></h2>' +
       '<p class="small muted" style="margin-top:0">Solo gastos variables: los fijos ya se descuentan aparte. ' + (sumCats > p.disponible ? '<b style="color:var(--critical)">La suma supera lo disponible.</b>' : 'Sin asignar: ' + fmt(p.disponible - sumCats) + '.') + '</p>' +
       p.categorias.filter(function (c) { return c.cat; }).map(function (c) {
-        return '<label class="inline" style="margin:6px 0"><span style="flex:1">' + esc(c.icono) + ' ' + esc(c.cat) + '</span><input class="input num" style="max-width:120px;text-align:right" inputmode="decimal" data-pres="' + esc(c.cat) + '" value="' + (c.presupuesto ? String(c.presupuesto).replace('.', ',') : '') + '" placeholder="sin límite"></label>';
+        return '<label class="inline" style="margin:6px 0"><span class="catname" style="flex:1">' + IK.svg(c.icono || 'tag') + esc(c.cat) + '</span><input class="input num" style="max-width:120px;text-align:right" inputmode="decimal" data-pres="' + esc(c.cat) + '" value="' + (c.presupuesto ? String(c.presupuesto).replace('.', ',') : '') + '" placeholder="sin límite"></label>';
       }).join('') + '</div>';
 
     var editCats = modo() === 'demo' || servidorVersion >= 4;
@@ -583,13 +587,13 @@
     [['gasto', 'Gastos'], ['ingreso', 'Ingresos']].forEach(function (t) {
       h += '<div class="group-title">' + t[1] + '</div><ul class="list">' + catsDe(t[0]).map(function (c) {
         var subs = subsDe(c.cat);
-        return '<li' + (editCats ? ' class="tap" data-act="cat" data-id="' + esc(c.cat) + '" data-tipo="' + t[0] + '"' : '') + '><span class="avatar">' + esc(c.icono || '•') + '</span><div class="grow"><div class="title">' + esc(c.cat) + '</div><div class="subline">' + (subs.length ? esc(subs.join(' · ')) : 'sin subcategorías') + '</div></div>' + (editCats ? '<span class="muted">›</span>' : '') + '</li>';
+        return '<li' + (editCats ? ' class="tap" data-act="cat" data-id="' + esc(c.cat) + '" data-tipo="' + t[0] + '"' : '') + '><span class="avatar">' + IK.svg(c.icono || 'tag') + '</span><div class="grow"><div class="title">' + esc(c.cat) + '</div><div class="subline">' + (subs.length ? esc(subs.join(' · ')) : 'sin subcategorías') + '</div></div>' + (editCats ? '<span class="muted">›</span>' : '') + '</li>';
       }).join('') + '</ul>';
     });
     h += (editCats ? '' : '<p class="small muted">Para editarlas desde aquí, actualiza el Apps Script (ver chat/README).</p>') + '</div>';
 
     h += '<div class="card"><h2>Cuentas</h2><ul class="list">' + V.cuentas.map(function (c) {
-      return '<li class="tap" data-act="cuenta" data-id="' + esc(c.id) + '"><span class="avatar">' + (ICONO_CUENTA[c.tipo] || '🏦') + '</span><div class="grow"><div class="title">' + esc(c.nombre) + '</div><div class="subline">ID ' + esc(c.id) + ' · ' + esc(c.tipo) + '</div></div><span class="muted">›</span></li>';
+      return '<li class="tap" data-act="cuenta" data-id="' + esc(c.id) + '"><span class="avatar">' + icoCuenta(c.tipo) + '</span><div class="grow"><div class="title">' + esc(c.nombre) + '</div><div class="subline">ID ' + esc(c.id) + ' · ' + esc(c.tipo) + '</div></div><span class="muted">›</span></li>';
     }).join('') + '</ul><p class="small muted">Para crear o renombrar cuentas, edita la hoja «Cuentas».</p></div>';
 
     var editable = modo() === 'demo' || servidorVersion >= 2;
@@ -602,7 +606,7 @@
 
     if (modo() === 'online') {
       h += '<div class="card"><h2>Seguridad</h2><p class="small sec" style="margin-top:0">' +
-        (caja ? '🔒 Los datos de este dispositivo están cifrados (AES-256). Se desbloquean con ' + ({ passkey: 'Face ID / huella', 'passkey-local': 'Face ID (modo compatible: llave no exportable guardada en el dispositivo)', password: 'tu contraseña' }[caja.metodo] || caja.metodo) + ' y se bloquean solos a los 30 s fuera de la app.' : '⚠️ Este dispositivo aún no está protegido: no se guarda nada hasta que lo protejas.') + '</p>' +
+        (caja ? 'Los datos de este dispositivo están cifrados (AES-256). Se desbloquean con ' + ({ passkey: 'Face ID / huella', 'passkey-local': 'Face ID (modo compatible: llave no exportable guardada en el dispositivo)', password: 'tu contraseña' }[caja.metodo] || caja.metodo) + ' y se bloquean solos a los 30 s fuera de la app.' : '⚠️ Este dispositivo aún no está protegido: no se guarda nada hasta que lo protejas.') + '</p>' +
         '<div class="stack"><button class="btn block' + (caja ? '' : ' primary') + '" data-act="proteger">' + (caja ? 'Cambiar método de desbloqueo' : 'Proteger ahora') + '</button>' +
         (caja ? '<button class="btn block" data-act="bloquear">Bloquear ahora</button>' : '') + '</div>' +
         (seguridad ? '<p class="small muted">Intentos de acceso fallidos a la hoja (7 días): ' + seguridad.fallos7d + '</p>' : '') + '</div>';
@@ -758,7 +762,7 @@
         if (puedeDeudas()) {
           h += '<div class="small sec">¿Quién te debe el resto?</div>';
           f.personas.forEach(function (pp, i) {
-            h += '<div class="persona-row"><span>👤</span><input class="input" data-p="' + i + '" data-pk="nombre" list="dl-personas" placeholder="Nombre" maxlength="40" autocapitalize="words" value="' + esc(pp.nombre) + '">' +
+            h += '<div class="persona-row"><span class="muted">' + ico('user') + '</span><input class="input" data-p="' + i + '" data-pk="nombre" list="dl-personas" placeholder="Nombre" maxlength="40" autocapitalize="words" value="' + esc(pp.nombre) + '">' +
               '<input class="input num" data-p="' + i + '" data-pk="importe" inputmode="decimal" placeholder="0,00" value="' + esc(pp.importe) + '">' +
               '<button class="btn small" data-f="quitar-persona" data-v="' + i + '" aria-label="Quitar">✕</button></div>';
           });
@@ -799,7 +803,7 @@
 
   function gridCats(tipo) {
     var f = form, h = '<div class="chips cats">' + catsDe(tipo).map(function (c) {
-      return '<button class="chip' + (f.cat === c.cat ? ' on' : '') + '" data-f="cat" data-v="' + esc(c.cat) + '">' + esc(c.icono || '•') + ' ' + esc(c.cat) + '</button>';
+      return '<button class="chip' + (f.cat === c.cat ? ' on' : '') + '" data-f="cat" data-v="' + esc(c.cat) + '">' + IK.svg(c.icono || 'tag') + esc(c.cat) + '</button>';
     }).join('') + '</div>';
     var subs = f.cat ? subsDe(f.cat) : [];
     if (subs.length) h += '<div class="chips">' + subs.map(function (s) { return '<button class="chip' + (f.sub === s ? ' on' : '') + '" data-f="sub" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>';
@@ -984,7 +988,7 @@
     var esCredito = function (id) { var c = cuenta(id); return c && c.tipo === 'credito'; };
 
     function opcionesCat(tipo, sel) {
-      return '<option value="">Elige…</option>' + catsDe(tipo).map(function (c) { return '<option value="' + esc(c.cat) + '"' + (c.cat === sel ? ' selected' : '') + '>' + esc(c.icono + ' ' + c.cat) + '</option>'; }).join('');
+      return '<option value="">Elige…</option>' + catsDe(tipo).map(function (c) { return '<option value="' + esc(c.cat) + '"' + (c.cat === sel ? ' selected' : '') + '>' + esc(c.cat) + '</option>'; }).join('');
     }
     function campo(label, html) { return '<label class="field"><span>' + label + '</span>' + html + '</label>'; }
     function pintar() {
@@ -1095,7 +1099,7 @@
   function abrirCuenta(id) {
     var c = cuenta(id), s = C.saldos(V)[id] || 0;
     var movs = V.movimientos.filter(function (m) { return m.cuenta === id || m.destino === id; });
-    var h = '<h3>' + (ICONO_CUENTA[c.tipo] || '') + ' ' + esc(c.nombre) + '</h3>' +
+    var h = '<h3 class="catname">' + icoCuenta(c.tipo) + esc(c.nombre) + '</h3>' +
       '<div class="hero num' + (s < 0 ? ' neg' : '') + '" style="font-size:34px">' + fmt(s) + '</div>' +
       '<p class="small muted" style="margin-top:0">Saldo inicial ' + fmt(c.saldoInicial) + ' el ' + (c.fechaInicial ? fCorta(c.fechaInicial) : '—') + (c.tae ? ' · ' + c.tae + ' % TAE, retención ' + (c.retencion || 0) + ' %' : '') + '</p>' +
       '<label class="field"><span>¿No cuadra? Escribe el saldo real y creo un ajuste</span><div class="inline"><input class="input num" id="c-real" inputmode="decimal" placeholder="' + String(s).replace('.', ',') + '"><button class="btn primary" id="c-ajustar">Ajustar</button></div></label>' +
@@ -1333,7 +1337,17 @@
   }
 
   // ---------------------------------------------------------------- arranque
+  /** Sin zoom: Safari ignora a veces user-scalable=no, así que se cortan también los gestos. */
+  function bloquearZoom() {
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+    });
+    document.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+    // El doble toque lo evita «touch-action: manipulation» (CSS) sin frenar el tecleo rápido.
+  }
+
   function iniciar() {
+    bloquearZoom();
     CH.bindTips(document.getElementById('app'));
     DB.open().then(function () {
       if (LS.get('demo', false)) {
