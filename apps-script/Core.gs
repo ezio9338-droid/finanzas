@@ -366,7 +366,9 @@ var HuchaCore = (function () {
     var cfg = state.config || {}, s = saldos(state, null, state.movimientos.some(function (m) { return m.id === nomina.id; }) ? [] : [nomina]);
     var out = [], hoy = nomina.fecha;
     var sob = cfg.cuentaSobrante, tarj = cfg.tarjetaSobrante;
-    var sobrante = r2((s[sob] || 0) + (tarj ? Math.min(0, s[tarj] || 0) : 0));
+    var deudaTarjeta = tarj ? r2(Math.max(0, -(s[tarj] || 0))) : 0;
+    var enDiaria = r2(s[sob] || 0);
+    var sobrante = r2(enDiaria - deudaTarjeta);
     var pct = num(cfg.repartoInversion) / 100;
     if (sobrante > 0) {
       var inv = r2(sobrante * pct);
@@ -374,24 +376,21 @@ var HuchaCore = (function () {
       out.push({ tipo: 'transferencia', fecha: hoy, cuenta: sob, destino: cfg.cuentaRemunerada, importe: r2(sobrante - inv), nota: 'Reparto sobrante (' + Math.round((1 - pct) * 100) + ' %)' });
     }
     // Lo que debe quedarse en la cuenta de nómina: fijos que salen de ella antes de la próxima nómina.
-    var finEst = addDays(addMonths(hoy, 1), -1), reservar = 0, deMac = 0;
+    var finEst = addDays(addMonths(hoy, 1), -1), reservar = 0, reservas = [];
     (state.fijos || []).forEach(function (f) {
       if (f.cuenta !== nomina.cuenta || f.tipo === 'ingreso') return;
       var n = ocurrencias(f, hoy, finEst).length;
+      if (!n) return;
       reservar += n * num(f.importe);
-      if (f.financiaDesde) deMac += n * num(f.importe);
+      reservas.push({ concepto: f.concepto, importe: r2(n * num(f.importe)) });
     });
     var enNomina = r2((s[nomina.cuenta] || 0));
     var aPasar = Math.floor(enNomina - reservar);
     if (aPasar > 0 && sob && sob !== nomina.cuenta) {
       out.push({ tipo: 'transferencia', fecha: hoy, cuenta: nomina.cuenta, destino: sob, importe: aPasar, nota: 'Nómina a cuenta diaria' });
     }
-    (state.fijos || []).forEach(function (f) {
-      if (!f.financiaDesde || f.cuenta !== nomina.cuenta) return;
-      var n = ocurrencias(f, hoy, finEst).length;
-      if (n > 0) out.push({ tipo: 'transferencia', fecha: hoy, cuenta: f.financiaDesde, destino: sob, importe: r2(n * num(f.importe)), nota: 'Repongo ' + f.concepto });
-    });
-    return { sobrante: sobrante, reservado: r2(reservar), movimientos: out };
+    // El traspaso desde Mac para reponer la cuota NO se propone aquí: la app lo apunta sola el día del cargo.
+    return { sobrante: sobrante, enDiaria: enDiaria, deudaTarjeta: deudaTarjeta, reservado: r2(reservar), reservas: reservas, movimientos: out };
   }
 
   // ---------- Automáticos (los ejecuta el Apps Script cada día) ----------
@@ -426,6 +425,15 @@ var HuchaCore = (function () {
             cat: f.cat || '', sub: f.sub || '', nota: f.concepto, miParte: '', nomina: false,
             reembolso: !!f.reembolso, vinculado: '', origen: 'fijo:' + f.id, act: Date.now()
           });
+          // Si el cargo se repone desde otra cuenta (p. ej. Mac), el traspaso se apunta el mismo día
+          var cfgA = state.config || {};
+          if (f.financiaDesde && cfgA.cuentaSobrante && f.financiaDesde !== cfgA.cuentaSobrante) {
+            add({
+              id: 'f-' + f.id + '-' + f.proxima + '-repone', fecha: f.proxima, tipo: 'transferencia', importe: imp,
+              cuenta: f.financiaDesde, destino: cfgA.cuentaSobrante, cat: '', sub: '', nota: 'Repongo ' + f.concepto,
+              miParte: '', nomina: false, reembolso: false, vinculado: '', origen: 'fijo:' + f.id, act: Date.now() + 1
+            });
+          }
         }
         f.proxima = siguienteFecha(f, f.proxima);
         if (f.restantes !== '' && f.restantes != null) {

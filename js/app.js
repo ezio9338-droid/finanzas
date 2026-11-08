@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.9.0';
+  var VERSION = '1.10.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -964,9 +964,15 @@
     if (!nom) return;
     var prop = C.propuestaNomina(V, nom);
     var lineas = prop.movimientos.map(function (m, i) { return Object.assign({ on: true, idx: i }, m); });
+    var sobN = esc(nombreCuenta(V.config.cuentaSobrante)), tarN = esc(nombreCuenta(V.config.tarjetaSobrante));
     var h = '<h3>Reparto al cobrar la nómina</h3>' +
-      '<p class="small sec" style="margin-top:0">Sobrante en ' + esc(nombreCuenta(V.config.cuentaSobrante)) + (V.config.tarjetaSobrante ? ' (descontando la deuda de ' + esc(nombreCuenta(V.config.tarjetaSobrante)) + ')' : '') + ': <b>' + fmt(prop.sobrante) + '</b>. ' +
-      'En ' + esc(nombreCuenta(nom.cuenta)) + ' se quedan ' + fmt(prop.reservado) + ' para los cargos fijos.</p>' +
+      '<ul class="list small">' +
+      '<li><span class="grow sec">' + sobN + ' antes de cobrar</span><span class="amount num">' + fmt(prop.enDiaria) + '</span></li>' +
+      (prop.deudaTarjeta ? '<li><span class="grow sec">− Se queda para la ' + tarN + ' (se cobra el día 1)</span><span class="amount num">−' + fmt(prop.deudaTarjeta) + '</span></li>' : '') +
+      '<li><span class="grow"><b>= Sobrante para ahorrar</b></span><span class="amount num">' + fmt(prop.sobrante) + '</span></li>' +
+      '</ul>' +
+      '<p class="small sec">En ' + esc(nombreCuenta(nom.cuenta)) + ' se quedan ' + fmt(prop.reservado) + (prop.reservas.length ? ' (' + esc(prop.reservas.map(function (r) { return r.concepto + ' ' + C.fmt(r.importe); }).join(' + ')) + ', más los céntimos)' : '') + '. ' +
+      'El día del cargo de la cuota, la app apunta sola el traspaso de reposición desde Mac.</p>' +
       '<ul class="list">' + lineas.map(function (l) {
         return '<li><input type="checkbox" checked data-r="' + l.idx + '" aria-label="Incluir"><div class="grow"><div class="title">' + esc(nombreCuenta(l.cuenta)) + ' → ' + esc(nombreCuenta(l.destino)) + '</div><div class="subline">' + esc(l.nota) + '</div></div>' +
           '<input class="input num" style="max-width:110px;text-align:right" inputmode="decimal" data-ri="' + l.idx + '" value="' + String(l.importe).replace('.', ',') + '"></li>';
