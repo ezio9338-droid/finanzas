@@ -67,7 +67,7 @@ var HOJAS = {
 var DESC_CONFIG = {
   sueldo: 'Sueldo de referencia (se usa hasta que registres la nómina del mes)',
   inicioCiclo: 'Fecha de inicio del primer ciclo (última nómina antes de empezar a usar la app)',
-  ahorroPct: 'Objetivo de ahorro, % de la nómina (incluye el plan de pensiones)',
+  ahorroPct: 'Objetivo de ahorro, % de la nómina (el plan de pensiones solo cuenta como ahorro si su fijo NO cuenta en el presupuesto)',
   repartoInversion: '% del sobrante que va a inversión (el resto a la remunerada)',
   cuentaInversion: 'ID de la cuenta de inversión',
   cuentaRemunerada: 'ID de la cuenta remunerada',

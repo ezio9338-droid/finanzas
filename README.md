@@ -88,7 +88,8 @@ Para gastar = Nómina − Gastos fijos del ciclo − Objetivo de ahorro (% de la
 ```
 
 - Los **gastos fijos** son los de la hoja `Fijos` marcados como *Cuenta en presupuesto*. Los reembolsos fijos (alguien que te paga parte de una suscripción) se restan.
-- El **objetivo de ahorro** incluye la aportación al plan de pensiones.
+- El **plan de pensiones** cuenta como **gasto fijo** si su fijo tiene activado *Cuenta en presupuesto* (dinero que no puedes tocar). Si no, cuenta como parte del ahorro.
+- Si empiezas a usar la app a mitad de ciclo, Inicio te ofrece **apuntar los cargos fijos anteriores** con su fecha; no cambian los saldos.
 - El **ritmo ideal** (la rayita sobre la barra) es el porcentaje del ciclo que ya ha pasado.
 - Los gastos con tarjeta de crédito cuentan **el día de la compra**. El pago de la tarjeta el día 1 es una transferencia, así que no se cuenta dos veces.
 

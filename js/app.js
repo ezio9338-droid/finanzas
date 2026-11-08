@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.6.2';
+  var VERSION = '1.7.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -201,6 +201,12 @@
     var h = topbar('Hucha');
 
     if (nom) h += '<div class="alert info"><span class="ico">€</span><div class="grow">Has cobrado la nómina. ¿Repartimos el sobrante?<div style="margin-top:8px"><button class="btn small primary" data-act="reparto" data-id="' + esc(nom.id) + '">Repartir</button> <button class="btn small" data-act="reparto-no" data-id="' + esc(nom.id) + '">Ya lo hice</button></div></div></div>';
+    var anteriores = C.fijosAnteriores(V, ciclo);
+    if (anteriores.length) {
+      h += '<div class="alert info"><span class="ico">!</span><div class="grow">Hay ' + anteriores.length + ' cargo(s) fijo(s) de este ciclo anteriores a que empezaras a usar Hucha: ' +
+        esc(anteriores.map(function (m) { return m.nota + ' (' + fCorta(m.fecha) + ')'; }).join(', ')) + '. Apúntalos para que el presupuesto cuadre; no cambian tus saldos.' +
+        '<div style="margin-top:8px"><button class="btn small primary" data-act="fijos-anteriores">Apuntarlos</button></div></div></div>';
+    }
     if (sync.estado === 'err' && modo() === 'online') al.unshift({ nivel: 'critical', texto: 'Sincronización: ' + sync.error });
     // Aviso de intentos fallidos: solo los NUEVOS desde la última vez que lo marcaste como visto.
     if (seguridad && seguridad.ultimo && seguridad.ultimo > LS.get('fallosVistos', 0)) {
@@ -237,7 +243,7 @@
       '<div class="small ' + (ap >= obj ? 'amount pos' : 'muted') + '">' + (ap >= obj ? '✓ objetivo' : Math.round(r * 100) + ' % del objetivo') + '</div></div>' +
       '<div class="bar thin"><div class="fill ' + (ap >= obj ? 'good' : 'serious') + '" style="width:' + (r * 100) + '%"></div></div>' +
       '<ul class="list small" style="margin-top:8px">' +
-      '<li><span class="grow sec">Plan de pensiones</span><span class="amount num">' + fmt(p.pension) + '</span></li>' +
+      (p.pension > 0 ? '<li><span class="grow sec">Plan de pensiones</span><span class="amount num">' + fmt(p.pension) + '</span></li>' : '') +
       '<li><span class="grow sec">Sobrante al cobrar → Inversión ' + p.repartoInversion + ' %</span><span class="amount num">' + fmt(inv) + '</span></li>' +
       '<li><span class="grow sec">Sobrante al cobrar → Remunerada ' + (100 - p.repartoInversion) + ' %</span><span class="amount num">' + fmt(rem) + '</span></li>' +
       '</ul></div>';
@@ -570,7 +576,7 @@
     var h = topbar('Ajustes');
 
     h += '<div class="card"><h2>Presupuesto y ahorro</h2>' +
-      campoNum('ahorroPct', 'Objetivo de ahorro (% de la nómina, incluye plan de pensiones)', cfg.ahorroPct) +
+      campoNum('ahorroPct', 'Objetivo de ahorro (% de la nómina)', cfg.ahorroPct) +
       campoNum('repartoInversion', '% del sobrante a inversión (resto a remunerada)', cfg.repartoInversion) +
       campoNum('sueldo', 'Sueldo de referencia (hasta registrar la nómina)', cfg.sueldo) +
       '<label class="field"><span>Inicio del primer ciclo (última nómina antes de usar la app)</span><input class="input" type="date" data-cfg="inicioCiclo" value="' + esc(cfg.inicioCiclo || '') + '"></label>' +
@@ -1223,6 +1229,10 @@
     else if (act === 'editar') { var m = V.movimientos.filter(function (x) { return x.id === id; })[0]; if (m) abrirMovimiento(m); }
     else if (act === 'cuenta') abrirCuenta(id);
     else if (act === 'ir') irA(id);
+    else if (act === 'fijos-anteriores') {
+      var ants = C.fijosAnteriores(V, cicloActual());
+      if (ants.length) { commit(ants.map(function (m) { return { op: 'mov', mov: m }; })); toast(ants.length + ' cargo(s) apuntado(s)'); }
+    }
     else if (act === 'cat') abrirCategoria(id, a.dataset.tipo);
     else if (act === 'cat-nueva') abrirCategoria(null, 'gasto');
     else if (act === 'persona') abrirPersona(id);

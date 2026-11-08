@@ -185,7 +185,7 @@ var HuchaCore = (function () {
     enCiclo.forEach(function (m) {
       if (m.origen && m.origen.indexOf('fijo:') === 0) {
         var f = fijosById[m.origen.slice(5)] || {};
-        if (m.tipo === 'transferencia' && tipos[m.destino] === 'pension') pension += num(m.importe);
+        if (m.tipo === 'transferencia' && tipos[m.destino] === 'pension' && !f.compromiso) pension += num(m.importe);
         if (f.compromiso) {
           var v = signoCompromiso(f) * num(m.importe);
           fijosPagados += v;
@@ -202,7 +202,9 @@ var HuchaCore = (function () {
       }
     });
 
-    var desde = hoy > ciclo.inicio ? hoy : ciclo.inicio;
+    // Desde el inicio del ciclo: así cuentan también los cargos ya vencidos que el servidor
+    // aún no ha apuntado (los ya registrados se descartan justo debajo).
+    var desde = ciclo.inicio;
     (state.fijos || []).forEach(function (f) {
       var occ = ocurrencias(f, desde, ciclo.fin);
       // Un fijo de hoy que ya se registró no debe contarse dos veces.
@@ -210,7 +212,7 @@ var HuchaCore = (function () {
         return !enCiclo.some(function (m) { return m.origen === 'fijo:' + f.id && m.fecha === d; });
       });
       occ.forEach(function (d) {
-        if (f.tipo === 'transferencia' && tipos[f.destino] === 'pension') pension += num(f.importe);
+        if (f.tipo === 'transferencia' && tipos[f.destino] === 'pension' && !f.compromiso) pension += num(f.importe);
         if (!f.compromiso) return;
         var v = signoCompromiso(f) * num(f.importe);
         fijosPendientes += v;
@@ -524,9 +526,50 @@ var HuchaCore = (function () {
 
   function indexById(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return i; return -1; }
 
+  // ---------- Cargos fijos anteriores a empezar ----------
+  /**
+   * Cargos de fijos que cuentan en presupuesto y caen entre el inicio del ciclo y el día en que
+   * se pusieron los saldos iniciales (no se registraron porque la app aún no existía).
+   * Se apuntan con su fecha: al ser anteriores al saldo inicial, no cambian los saldos.
+   */
+  function fijosAnteriores(state, ciclo) {
+    var inicioApp = null;
+    (state.cuentas || []).forEach(function (c) { if (c.fechaInicial && (!inicioApp || c.fechaInicial < inicioApp)) inicioApp = c.fechaInicial; });
+    if (!inicioApp || inicioApp <= ciclo.inicio) return [];
+    var ids = {};
+    (state.movimientos || []).forEach(function (m) { ids[m.id] = true; });
+    var out = [];
+    (state.fijos || []).forEach(function (f) {
+      if (!f.compromiso || f.modo === 'liquidar' || !f.proxima) return;
+      var fechas = [];
+      if (f.frecuencia === 'dias') {
+        var d = f.proxima, guard = 0;
+        while (d >= ciclo.inicio && guard++ < 400) { if (d < inicioApp) fechas.push(d); d = addDays(d, -(+f.cada || 28)); }
+      } else {
+        var dia = +f.dia || parseISO(f.proxima).getUTCDate(), m0 = parseISO(ciclo.inicio), y = m0.getUTCFullYear(), mo = m0.getUTCMonth();
+        for (var n = 0; n < 3; n++) {
+          var yy = y + Math.floor((mo + n) / 12), mm = (mo + n) % 12;
+          var fd = toISO(new Date(Date.UTC(yy, mm, Math.min(dia, daysInMonth(yy, mm)))));
+          if (fd >= ciclo.inicio && fd < inicioApp) fechas.push(fd);
+        }
+      }
+      fechas.forEach(function (fd) {
+        var id = 'f-' + f.id + '-' + fd;
+        if (ids[id]) return;
+        out.push({
+          id: id, fecha: fd, tipo: f.tipo, importe: num(f.importe), cuenta: f.cuenta, destino: f.tipo === 'transferencia' ? f.destino : '',
+          cat: f.cat || '', sub: f.sub || '', nota: f.concepto, miParte: '', nomina: false, reembolso: !!f.reembolso,
+          vinculado: '', pagaDeuda: '', origen: 'fijo:' + f.id, act: Date.now()
+        });
+      });
+    });
+    return out.sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
+  }
+
   // ---------- Estadísticas ----------
   function estadisticas(state, hoy) {
-    var cs = ciclos(state, hoy);
+    var cs = ciclos(state, hoy), fijosById = {};
+    (state.fijos || []).forEach(function (f) { fijosById[f.id] = f; });
     return cs.map(function (c) {
       var ing = 0, nom = 0, intereses = 0, gas = 0, porCat = {};
       (state.movimientos || []).forEach(function (m) {
@@ -539,6 +582,10 @@ var HuchaCore = (function () {
           if (m.origen === 'interes') intereses += num(m.importe);
         } else if (m.tipo === 'gasto') {
           var p = parteMia(m); gas += p; porCat[m.cat] = (porCat[m.cat] || 0) + p;
+        } else if (m.tipo === 'transferencia' && m.origen && m.origen.indexOf('fijo:') === 0) {
+          // Transferencias fijas que cuentan en presupuesto (plan de pensiones, cuota…) = gasto
+          var fj = fijosById[m.origen.slice(5)];
+          if (fj && fj.compromiso) { var k = fj.cat || fj.concepto || 'Fijos'; gas += num(m.importe); porCat[k] = (porCat[k] || 0) + num(m.importe); }
         }
       });
       var hasta = c.fin < hoy ? c.fin : hoy;
@@ -628,7 +675,7 @@ var HuchaCore = (function () {
     r2: r2, num: num, fmt: fmt, uid: uid, redondeo: redondeo, interesDiario: interesDiario,
     saldos: saldos, patrimonio: patrimonio, ciclos: ciclos, cicloDe: cicloDe, ocurrencias: ocurrencias,
     presupuesto: presupuesto, alertas: alertas, pendientesCobro: pendientesCobro, propuestaNomina: propuestaNomina,
-    deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
+    fijosAnteriores: fijosAnteriores, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
     procesarAutomaticos: procesarAutomaticos, aplicarOps: aplicarOps, estadisticas: estadisticas,
     categoriasBase: categoriasBase, estadoEjemplo: estadoEjemplo, parteMia: parteMia
   };
