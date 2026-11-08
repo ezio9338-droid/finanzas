@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.7.0';
+  var VERSION = '1.8.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -155,6 +155,7 @@
   function nombreCuenta(id) { var c = cuenta(id); return c ? c.nombre : (id || '—'); }
   function iconoCat(cat) {
     var c = (V.categorias || []).filter(function (x) { return x.cat === cat && !x.sub; })[0];
+    if (!c && cat === C.REDONDEOS) return IK.svg('jar');
     return IK.svg(c && c.icono ? c.icono : 'tag');
   }
   function cicloActual() { var cs = C.ciclos(V, hoy()); return cs[cs.length - 1]; }
@@ -259,7 +260,7 @@
       h += '<div class="card"><h2>Por categoría</h2>' + cats.map(function (c) {
         var rr = c.presupuesto > 0 ? c.gastado / c.presupuesto : (c.gastado > 0 ? 1 : 0);
         var k = rr >= 1 ? 'critical' : rr >= 0.8 ? 'serious' : '';
-        return '<div class="catrow"><div class="row"><span class="catname">' + IK.svg(c.icono || 'tag') + esc(c.cat) + '</span><span class="num sec">' + fmt(c.gastado) + (c.presupuesto ? ' <span class="muted">/ ' + fmt(c.presupuesto) + '</span>' : '') + '</span></div>' +
+        return '<div class="catrow"><div class="row"><span class="catname">' + IK.svg(c.icono || (c.cat === C.REDONDEOS ? 'jar' : 'tag')) + esc(c.cat) + '</span><span class="num sec">' + fmt(c.gastado) + (c.presupuesto ? ' <span class="muted">/ ' + fmt(c.presupuesto) + '</span>' : '') + '</span></div>' +
           (c.presupuesto ? '<div class="bar thin"><div class="fill ' + k + '" style="width:' + Math.min(100, Math.max(0, rr) * 100) + '%"></div><div class="mark" style="left:calc(' + (p.ritmo * 100) + '% - 1px)"></div></div>' : '') + '</div>';
       }).join('') + '</div>';
     }
@@ -584,7 +585,7 @@
 
     h += '<div class="card"><h2>Presupuesto por categoría<span class="right">' + fmt(sumCats) + ' de ' + fmt(p.disponible) + '</span></h2>' +
       '<p class="small muted" style="margin-top:0">Solo gastos variables: los fijos ya se descuentan aparte. ' + (sumCats > p.disponible ? '<b style="color:var(--critical)">La suma supera lo disponible.</b>' : 'Sin asignar: ' + fmt(p.disponible - sumCats) + '.') + '</p>' +
-      p.categorias.filter(function (c) { return c.cat; }).map(function (c) {
+      p.categorias.filter(function (c) { return c.cat && c.cat !== C.REDONDEOS; }).map(function (c) {
         return '<label class="inline" style="margin:6px 0"><span class="catname" style="flex:1">' + IK.svg(c.icono || 'tag') + esc(c.cat) + '</span><input class="input num" style="max-width:120px;text-align:right" inputmode="decimal" data-pres="' + esc(c.cat) + '" value="' + (c.presupuesto ? String(c.presupuesto).replace('.', ',') : '') + '" placeholder="sin límite"></label>';
       }).join('') + '</div>';
 
@@ -822,7 +823,7 @@
     var d = $('#f-imp', hoja);
     if (d) { d.textContent = (f.tipo === 'ajuste' && f.signo < 0 ? '−' : '') + (f.importe || '0') + ' €'; d.classList.toggle('empty', !f.importe); }
     var c = cuenta(f.cuenta);
-    if (f.tipo === 'gasto' && f.debito && c && c.redondeoA && imp > 0) txt = '+' + fmt(C.redondeo(imp)) + ' → ' + nombreCuenta(c.redondeoA) + ' (redondeo)';
+    if (f.tipo === 'gasto' && f.debito && c && c.redondeoA && imp > 0) txt = '+' + fmt(C.redondeo(imp)) + ' → ' + nombreCuenta(c.redondeoA) + ' (redondeo, cuenta como gasto)';
     if (f.tipo === 'gasto' && f.compartido && imp > 0) {
       var otros = (f.personas || []).reduce(function (a, pp) { return a + C.num(pp.importe); }, 0), falta = C.r2(imp - C.num(f.miParte) - otros);
       txt += (txt ? ' · ' : '') + (puedeDeudas() && f.personas.length ? (Math.abs(falta) < 0.01 ? '✓ cuadra' : falta > 0 ? 'faltan ' + fmt(falta) + ' por asignar' : 'te pasas ' + fmt(-falta)) : 'te deberán ' + fmt(imp - C.num(f.miParte)));

@@ -155,6 +155,7 @@ var HuchaCore = (function () {
   }
 
   // ---------- Presupuesto del ciclo ----------
+  var REDONDEOS = 'Redondeos';
   function esVariable(m) { return !m.origen || m.origen === 'manual'; }
   function parteMia(m) { return m.miParte !== '' && m.miParte != null ? num(m.miParte) : num(m.importe); }
 
@@ -191,6 +192,11 @@ var HuchaCore = (function () {
           fijosPagados += v;
           lineasFijos.push({ concepto: f.concepto || m.nota, fecha: m.fecha, importe: v, pagado: true });
         }
+        return;
+      }
+      if (m.origen === 'redondeo' && m.tipo === 'transferencia') {
+        // El redondeo sale de la cuenta diaria: cuenta como gasto (paga el aplazado vía Mac)
+        porCat[REDONDEOS] = (porCat[REDONDEOS] || 0) + num(m.importe); total += num(m.importe);
         return;
       }
       if (!esVariable(m)) return;
@@ -582,6 +588,8 @@ var HuchaCore = (function () {
           if (m.origen === 'interes') intereses += num(m.importe);
         } else if (m.tipo === 'gasto') {
           var p = parteMia(m); gas += p; porCat[m.cat] = (porCat[m.cat] || 0) + p;
+        } else if (m.tipo === 'transferencia' && m.origen === 'redondeo') {
+          gas += num(m.importe); porCat[REDONDEOS] = (porCat[REDONDEOS] || 0) + num(m.importe);
         } else if (m.tipo === 'transferencia' && m.origen && m.origen.indexOf('fijo:') === 0) {
           // Transferencias fijas que cuentan en presupuesto (plan de pensiones, cuota…) = gasto
           var fj = fijosById[m.origen.slice(5)];
@@ -675,7 +683,7 @@ var HuchaCore = (function () {
     r2: r2, num: num, fmt: fmt, uid: uid, redondeo: redondeo, interesDiario: interesDiario,
     saldos: saldos, patrimonio: patrimonio, ciclos: ciclos, cicloDe: cicloDe, ocurrencias: ocurrencias,
     presupuesto: presupuesto, alertas: alertas, pendientesCobro: pendientesCobro, propuestaNomina: propuestaNomina,
-    fijosAnteriores: fijosAnteriores, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
+    fijosAnteriores: fijosAnteriores, REDONDEOS: REDONDEOS, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
     procesarAutomaticos: procesarAutomaticos, aplicarOps: aplicarOps, estadisticas: estadisticas,
     categoriasBase: categoriasBase, estadoEjemplo: estadoEjemplo, parteMia: parteMia
   };
