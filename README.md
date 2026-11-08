@@ -77,6 +77,7 @@ En el PC puedes usar la misma dirección en cualquier navegador.
 | Corregir un saldo | Toca la cuenta → escribe el saldo real → **Ajustar**. |
 | Editar o borrar | Toca el movimiento en la lista. |
 | Cambiar el % de ahorro o los presupuestos | **⚙ Ajustes** (arriba a la derecha). |
+| Crear, renombrar o borrar categorías y subcategorías | **⚙ Ajustes → Categorías**. Al renombrar, se cambia también en los movimientos y fijos. |
 | Añadir, editar, pausar o borrar un gasto fijo | **Ajustes → Gastos fijos → ＋ Añadir**, o toca uno existente. |
 | Añadir una cuenta | Edita la pestaña `Cuentas` de la hoja. La app la recoge al sincronizar. |
 

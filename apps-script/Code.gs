@@ -15,7 +15,7 @@
  */
 
 var ZONA = 'Europe/Madrid';
-var API_VERSION = 3; // 2: gastos fijos desde la app · 3: deudas por persona
+var API_VERSION = 4; // 2: gastos fijos desde la app · 3: deudas por persona · 4: editar categorías
 
 var HOJAS = {
   Movimientos: {
@@ -345,6 +345,29 @@ function validarOps(ops) {
       return { op: 'debo', debo: { id: vId(b.id), persona: pb, concepto: vTexto(b.concepto, 120), importe: ib, fecha: fb } };
     }
     if (op.op === 'borrarDebo') return { op: 'borrarDebo', id: vId(op.id) };
+    if (op.op === 'categoria') {
+      if (['gasto', 'ingreso'].indexOf(op.tipo) < 0) throw invalida();
+      var nombre = vTexto(op.cat, 40).trim(), antes = vTexto(op.antes, 40);
+      if (!nombre) throw invalida();
+      if (antes === 'Ingresos' && nombre !== 'Ingresos') throw invalida();
+      if (!Array.isArray(op.subs) || op.subs.length > 40) throw invalida();
+      var vistos = {};
+      var subs = op.subs.map(function (sb) {
+        var n = vTexto(sb && sb.nombre, 40).trim();
+        if (!n || vistos[n.toLowerCase()]) throw invalida();
+        vistos[n.toLowerCase()] = true;
+        return { antes: vTexto(sb.antes, 40), nombre: n };
+      });
+      if (nombre === 'Ingresos') ['Nómina', 'Intereses'].forEach(function (fija) { if (!vistos[fija.toLowerCase()]) throw invalida(); });
+      var pres = op.presupuesto === '' || op.presupuesto === undefined ? '' : vNum(op.presupuesto);
+      if (pres !== '' && pres < 0) throw invalida();
+      return { op: 'categoria', tipo: op.tipo, antes: antes, cat: nombre, icono: vTexto(op.icono, 16), presupuesto: pres, subs: subs };
+    }
+    if (op.op === 'borrarCategoria') {
+      var bc = vTexto(op.cat, 40);
+      if (!bc || bc === 'Ingresos' || ['gasto', 'ingreso'].indexOf(op.tipo) < 0) throw invalida();
+      return { op: 'borrarCategoria', cat: bc, tipo: op.tipo };
+    }
     if (op.op === 'presupuesto') {
       var val = op.valor === '' ? '' : vNum(op.valor);
       if (val !== '' && val < 0) throw invalida();

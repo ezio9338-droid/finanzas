@@ -471,6 +471,10 @@ var HuchaCore = (function () {
         if (b >= 0) state.debo[b] = op.debo; else state.debo.push(op.debo);
       } else if (op.op === 'borrarDebo') {
         state.debo = (state.debo || []).filter(function (d) { return d.id !== op.id; });
+      } else if (op.op === 'categoria') {
+        aplicarCategoria(state, op);
+      } else if (op.op === 'borrarCategoria') {
+        state.categorias = (state.categorias || []).filter(function (c) { return !(c.cat === op.cat && c.tipo === op.tipo); });
       } else if (op.op === 'config') {
         state.config[op.clave] = op.valor;
       } else if (op.op === 'presupuesto') {
@@ -487,6 +491,37 @@ var HuchaCore = (function () {
     });
     return state;
   }
+  /**
+   * Crea o edita una categoría con sus subcategorías.
+   * op: {tipo, antes, cat, icono, presupuesto, subs:[{antes, nombre}]}
+   * Si cambia el nombre (o el de una subcategoría) se renombra también en movimientos y fijos.
+   */
+  function aplicarCategoria(state, op) {
+    var cats = state.categorias = state.categorias || [];
+    var clave = op.antes || op.cat, pos = -1;
+    for (var i = 0; i < cats.length; i++) if (cats[i].cat === clave && cats[i].tipo === op.tipo) { pos = i; break; }
+    var restantes = cats.filter(function (c) { return !(c.cat === clave && c.tipo === op.tipo); });
+    if (pos < 0) {
+      // Nueva: al final de su tipo (los gastos van antes que los ingresos)
+      pos = restantes.length;
+      if (op.tipo === 'gasto') for (var j = 0; j < restantes.length; j++) if (restantes[j].tipo !== 'gasto') { pos = j; break; }
+    } else {
+      pos = cats.slice(0, pos).filter(function (c) { return !(c.cat === clave && c.tipo === op.tipo); }).length;
+    }
+    var filas = [{ cat: op.cat, sub: '', tipo: op.tipo, icono: op.icono || '', presupuesto: op.presupuesto === undefined ? '' : op.presupuesto }];
+    (op.subs || []).forEach(function (sb) { filas.push({ cat: op.cat, sub: sb.nombre, tipo: op.tipo, icono: '', presupuesto: '' }); });
+    state.categorias = restantes.slice(0, pos).concat(filas, restantes.slice(pos));
+    var listas = [state.movimientos || [], state.fijos || []];
+    if (op.antes && op.antes !== op.cat) {
+      listas.forEach(function (l) { l.forEach(function (x) { if (x.cat === op.antes) x.cat = op.cat; }); });
+      (state.deudas || []).forEach(function (d) { if (d.concepto === op.antes) d.concepto = op.cat; });
+    }
+    (op.subs || []).forEach(function (sb) {
+      if (!sb.antes || sb.antes === sb.nombre) return;
+      listas.forEach(function (l) { l.forEach(function (x) { if (x.cat === op.cat && x.sub === sb.antes) x.sub = sb.nombre; }); });
+    });
+  }
+
   function indexById(arr, id) { for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return i; return -1; }
 
   // ---------- Estadísticas ----------
