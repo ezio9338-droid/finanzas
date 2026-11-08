@@ -15,7 +15,7 @@
  */
 
 var ZONA = 'Europe/Madrid';
-var API_VERSION = 2; // 2: gestión de gastos fijos desde la app
+var API_VERSION = 3; // 2: gastos fijos desde la app · 3: deudas por persona
 
 var HOJAS = {
   Movimientos: {
@@ -23,7 +23,7 @@ var HOJAS = {
       ['id', 'ID'], ['fecha', 'Fecha'], ['tipo', 'Tipo'], ['importe', 'Importe'], ['cuenta', 'Cuenta'],
       ['destino', 'Cuenta destino'], ['cat', 'Categoría'], ['sub', 'Subcategoría'], ['nota', 'Nota'],
       ['miParte', 'Mi parte'], ['nomina', 'Es nómina'], ['reembolso', 'Es reembolso'],
-      ['vinculado', 'Vinculado a'], ['origen', 'Origen'], ['act', 'Actualizado']
+      ['vinculado', 'Vinculado a'], ['origen', 'Origen'], ['act', 'Actualizado'], ['pagaDeuda', 'Salda deuda de']
     ],
     fechas: ['fecha'], dinero: ['importe', 'miParte'], bool: ['nomina', 'reembolso']
   },
@@ -53,6 +53,14 @@ var HOJAS = {
   Config: {
     cols: [['clave', 'Clave'], ['valor', 'Valor'], ['desc', 'Descripción']],
     fechas: [], dinero: [], bool: []
+  },
+  Deudas: {
+    cols: [['id', 'ID'], ['movId', 'Movimiento'], ['fecha', 'Fecha'], ['persona', 'Persona'], ['importe', 'Importe'], ['concepto', 'Concepto']],
+    fechas: ['fecha'], dinero: ['importe'], bool: []
+  },
+  Debo: {
+    cols: [['id', 'ID'], ['persona', 'Persona'], ['concepto', 'Concepto'], ['importe', 'Importe'], ['fecha', 'Fecha']],
+    fechas: ['fecha'], dinero: ['importe'], bool: []
   }
 };
 
@@ -286,6 +294,7 @@ function validarOps(ops) {
         id: vId(m.id), fecha: fecha, tipo: m.tipo, importe: vNum(m.importe),
         cuenta: vId(m.cuenta), destino: vId(m.destino, true), cat: vTexto(m.cat, 60), sub: vTexto(m.sub, 60),
         nota: vTexto(m.nota, 200), miParte: vNum(m.miParte, true), nomina: m.nomina === true, reembolso: m.reembolso === true,
+        pagaDeuda: m.tipo === 'ingreso' ? vTexto(m.pagaDeuda, 40).trim() : '',
         vinculado: vId(m.vinculado, true), origen: origen, act: typeof m.act === 'number' && isFinite(m.act) ? m.act : Date.now()
       } };
     }
@@ -317,6 +326,25 @@ function validarOps(ops) {
       } };
     }
     if (op.op === 'borrarFijo') return { op: 'borrarFijo', id: vId(op.id) };
+    if (op.op === 'deudas') {
+      var movId = vId(op.movId);
+      if (!Array.isArray(op.lista) || op.lista.length > 50) throw invalida();
+      return { op: 'deudas', movId: movId, lista: op.lista.map(function (d) {
+        var persona = vTexto(d.persona, 40).trim(), fd = vTexto(d.fecha, 10);
+        if (!persona || !RE_FECHA.test(fd)) throw invalida();
+        var imp = vNum(d.importe);
+        if (!(imp > 0)) throw invalida();
+        return { id: vId(d.id), movId: movId, fecha: fd, persona: persona, importe: imp, concepto: vTexto(d.concepto, 120) };
+      }) };
+    }
+    if (op.op === 'debo') {
+      var b = op.debo || {}, pb = vTexto(b.persona, 40).trim(), fb = vTexto(b.fecha, 10);
+      if (!pb || !RE_FECHA.test(fb)) throw invalida();
+      var ib = vNum(b.importe, true);
+      if (ib !== '' && ib < 0) throw invalida();
+      return { op: 'debo', debo: { id: vId(b.id), persona: pb, concepto: vTexto(b.concepto, 120), importe: ib, fecha: fb } };
+    }
+    if (op.op === 'borrarDebo') return { op: 'borrarDebo', id: vId(op.id) };
     if (op.op === 'presupuesto') {
       var val = op.valor === '' ? '' : vNum(op.valor);
       if (val !== '' && val < 0) throw invalida();
@@ -329,7 +357,8 @@ function validarOps(ops) {
 function firma(st) {
   return {
     movimientos: JSON.stringify(st.movimientos), cuentas: JSON.stringify(st.cuentas),
-    categorias: JSON.stringify(st.categorias), fijos: JSON.stringify(st.fijos), config: JSON.stringify(st.config)
+    categorias: JSON.stringify(st.categorias), fijos: JSON.stringify(st.fijos), config: JSON.stringify(st.config),
+    deudas: JSON.stringify(st.deudas), debo: JSON.stringify(st.debo)
   };
 }
 
@@ -391,12 +420,20 @@ function leerEstado() {
     return c;
   });
   var cats = leerHoja('Categorias').map(function (c) { c.tipo = String(c.tipo || 'gasto').toLowerCase(); return c; });
-  return { config: cfg, cuentas: cuentas, categorias: cats, fijos: fijos, movimientos: movs };
+  var deudas = leerHoja('Deudas').map(function (d) { d.id = String(d.id); d.movId = String(d.movId); d.persona = String(d.persona).trim(); d.concepto = String(d.concepto); return d; });
+  var debo = leerHoja('Debo').map(function (d) { d.id = String(d.id); d.persona = String(d.persona).trim(); d.concepto = String(d.concepto); return d; });
+  movs.forEach(function (m) { m.pagaDeuda = m.pagaDeuda ? String(m.pagaDeuda).trim() : ''; });
+  return { config: cfg, cuentas: cuentas, categorias: cats, fijos: fijos, movimientos: movs, deudas: deudas, debo: debo };
 }
 
 function escribirHoja(nombre, filas) {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
   var spec = HOJAS[nombre], n = spec.cols.length;
+  // Cabecera siempre al día (las versiones nuevas pueden añadir columnas al final)
+  sh.getRange(1, 1, 1, n).setValues([spec.cols.map(function (c) { return c[1]; })])
+    .setFontWeight('bold').setBackground('#1f3a5f').setFontColor('#ffffff');
+  sh.setFrozenRows(1);
   var last = sh.getLastRow();
   if (last > 1) sh.getRange(2, 1, last - 1, n).clearContent();
   if (!filas.length) return;
@@ -430,6 +467,8 @@ function escribirTodo(st, que) {
   if (que.cuentas) escribirHoja('Cuentas', st.cuentas.slice().sort(function (a, b) { return a.orden - b.orden; }));
   if (que.categorias) escribirHoja('Categorias', st.categorias);
   if (que.fijos) escribirHoja('Fijos', st.fijos);
+  if (que.deudas) escribirHoja('Deudas', (st.deudas || []).slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; }));
+  if (que.debo) escribirHoja('Debo', st.debo || []);
   if (que.config) escribirHoja('Config', Object.keys(st.config).map(function (k) {
     return { clave: k, valor: st.config[k], desc: DESC_CONFIG[k] || '' };
   }));

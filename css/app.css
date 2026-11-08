@@ -23,6 +23,8 @@
   --series-2: #4f6fae;
   --good: #0ca30c;
   --good-text: #006300;
+  --pos-text: #17803d;
+  --neg-text: #c0352b;
   --warning: #fab219;
   --serious: #ec835a;
   --critical: #d03b3b;
@@ -54,6 +56,8 @@
     --series-1: #b88934;
     --series-2: #6a82c2;
     --good-text: #0ca30c;
+    --pos-text: #4cc27a;
+    --neg-text: #f07a6e;
     --track: #2a2a2e;
     --shadow: none;
   }
@@ -63,7 +67,7 @@
   --bg: #0b0b0c; --surface: #161618; --surface-2: #222225; --border: rgba(255,255,255,.08);
   --text: #f2efe8; --text-2: #c4c1b8; --muted: #8c8a84; --grid: #26262a; --axis: #38383d;
   --accent: #d9b878; --accent-ink: #141414; --accent-soft: #2b2619; --bar: #d9b878; --tab-on: #d9b878; --link: #d9b878;
-  --series-1: #b88934; --series-2: #6a82c2; --good-text: #0ca30c; --track: #2a2a2e; --shadow: none;
+  --series-1: #b88934; --series-2: #6a82c2; --good-text: #0ca30c; --pos-text: #4cc27a; --neg-text: #f07a6e; --track: #2a2a2e; --shadow: none;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -138,8 +142,8 @@ button { cursor: pointer; }
 .list .grow { flex: 1; min-width: 0; }
 .list .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .list .amount { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-.amount.pos { color: var(--good-text); }
-.amount.neg { color: var(--text); }
+.amount.pos { color: var(--pos-text); }
+.amount.neg { color: var(--neg-text); }
 .amount.tr { color: var(--text-2); font-weight: 500; }
 .list li.tap { cursor: pointer; }
 .list li.tap:active { opacity: .6; }
@@ -305,3 +309,14 @@ details summary { cursor: pointer; color: var(--link); font-size: 14px; margin-t
 body.oculto #app, body.oculto .overlay, body.oculto .tabbar { filter: blur(28px); }
 
 .inline > .field { flex: 1; min-width: 0; margin: 6px 0; }
+
+/* Barra superior: botón de ajustes */
+.iconbtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); display: grid; place-items: center; padding: 0; }
+/* Tarjeta "Te deben" en Inicio */
+.debts-card { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.debts-card > span:first-child { flex: 1; }
+/* Gasto compartido con personas */
+.shared { background: var(--surface-2); border-radius: 12px; padding: 4px 10px 10px; margin-top: 4px; }
+.shared .input { background: var(--surface); }
+.persona-row { display: grid; grid-template-columns: auto 1fr 96px auto; gap: 6px; align-items: center; margin-top: 6px; }
+.persona-row .input { min-height: 40px; padding: 8px 10px; }

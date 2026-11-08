@@ -69,12 +69,14 @@ En el PC puedes usar la misma dirección en cualquier navegador.
 | Quiero… | Cómo |
 |---|---|
 | Apuntar un gasto | **＋** → importe → categoría → Guardar. Si pagas con la débito, el redondeo a Mac se apunta solo. |
-| Una cena que me pagarán | Activa **Compartido** y pon **tu parte**. Cuando llegue el Bizum, pulsa **Cobrado** en "Me deben". |
+| Una cena que me pagarán | Activa **Compartido**, pon **tu parte** y añade **quién te debe** y cuánto (o pulsa *Repartir a partes iguales*). Aparece en la pestaña **Deudas**. |
+| Me pagan una deuda | Pestaña **Deudas** → toca la persona → **Me ha pagado**. O bien ＋ → Ingreso → **Salda una deuda**. |
+| Recordar lo que debo yo | Pestaña **Deudas** → **＋ Añadir lo que debo**. No cambia los saldos. |
 | Cobrar la nómina | **＋ → Ingreso → Es la nómina**. Empieza un ciclo nuevo y se abre el asistente de reparto. |
 | Pasar dinero entre cuentas | **＋ → Transferencia**. |
 | Corregir un saldo | Toca la cuenta → escribe el saldo real → **Ajustar**. |
 | Editar o borrar | Toca el movimiento en la lista. |
-| Cambiar el % de ahorro o los presupuestos | **Ajustes**. |
+| Cambiar el % de ahorro o los presupuestos | **⚙ Ajustes** (arriba a la derecha). |
 | Añadir, editar, pausar o borrar un gasto fijo | **Ajustes → Gastos fijos → ＋ Añadir**, o toca uno existente. |
 | Añadir una cuenta | Edita la pestaña `Cuentas` de la hoja. La app la recoge al sincronizar. |
 

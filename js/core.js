@@ -284,7 +284,58 @@ var HuchaCore = (function () {
     return (neg ? '−' : '') + ent + ',' + dec + ' €';
   }
 
-  // ---------- Compartidos / reembolsos ----------
+  // ---------- Deudas: lo que me deben, por persona ----------
+  function clavePersona(n) { return String(n || '').trim().toLowerCase(); }
+  var SIN_ASIGNAR = 'Sin asignar';
+
+  /**
+   * Agrupa por persona lo que te deben (hoja Deudas) menos lo que ya te han pagado
+   * (ingresos con «Salda deuda de»). Los pagos se aplican a las deudas más antiguas primero.
+   * Los gastos compartidos antiguos sin personas aparecen como «Sin asignar».
+   * Devuelve [{persona, total, pagado, pendiente, items:[{deuda, restante, pagado}], pagos:[mov]}].
+   */
+  function deudas(state) {
+    var por = {}, conPersonas = {};
+    function grupo(nombre) { var k = clavePersona(nombre); return por[k] = por[k] || { persona: String(nombre).trim(), deudas: [], pagado: 0, pagos: [] }; }
+    (state.deudas || []).forEach(function (d) {
+      if (!clavePersona(d.persona)) return;
+      conPersonas[d.movId] = true;
+      grupo(d.persona).deudas.push(d);
+    });
+    var cobradoLegacy = {};
+    (state.movimientos || []).forEach(function (m) {
+      if (m.tipo !== 'ingreso') return;
+      if (m.pagaDeuda) { var g = grupo(m.pagaDeuda); g.pagado += num(m.importe); g.pagos.push(m); }
+      else if (m.vinculado) cobradoLegacy[m.vinculado] = (cobradoLegacy[m.vinculado] || 0) + num(m.importe);
+    });
+    // Compatibilidad: gastos compartidos registrados antes de existir las personas
+    (state.movimientos || []).forEach(function (m) {
+      if (m.tipo !== 'gasto' || m.miParte === '' || m.miParte == null || conPersonas[m.id]) return;
+      var resto = r2(num(m.importe) - num(m.miParte) - (cobradoLegacy[m.id] || 0));
+      if (resto > 0.004) grupo(SIN_ASIGNAR).deudas.push({ id: 'legacy-' + m.id, movId: m.id, fecha: m.fecha, persona: SIN_ASIGNAR, importe: resto, concepto: m.nota || m.sub || m.cat });
+    });
+    var out = [];
+    Object.keys(por).forEach(function (k) {
+      var p = por[k], resto = p.pagado, total = 0, items = [];
+      p.deudas.sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; }).forEach(function (d) {
+        var imp = num(d.importe), usa = Math.min(imp, Math.max(0, resto));
+        resto -= usa; total += imp;
+        if (imp - usa > 0.004) items.push({ deuda: d, restante: r2(imp - usa), pagado: r2(usa) });
+      });
+      out.push({ persona: p.persona, total: r2(total), pagado: r2(p.pagado), pendiente: r2(total - p.pagado), items: items, pagos: p.pagos, deudas: p.deudas });
+    });
+    return out.sort(function (a, b) { return b.pendiente - a.pendiente; });
+  }
+  function totalMeDeben(state) { return r2(deudas(state).reduce(function (a, d) { return a + Math.max(0, d.pendiente); }, 0)); }
+  function personasConocidas(state) {
+    var vistos = {}, out = [];
+    (state.deudas || []).concat(state.debo || []).forEach(function (d) {
+      var k = clavePersona(d.persona); if (k && k !== clavePersona(SIN_ASIGNAR) && !vistos[k]) { vistos[k] = 1; out.push(String(d.persona).trim()); }
+    });
+    return out.sort(function (a, b) { return a.localeCompare(b, 'es'); });
+  }
+
+  // ---------- Compartidos / reembolsos (antiguo) ----------
   function pendientesCobro(state) {
     var cobrado = {};
     (state.movimientos || []).forEach(function (m) {
@@ -410,6 +461,16 @@ var HuchaCore = (function () {
         if (i >= 0) state.movimientos[i] = op.mov; else state.movimientos.push(op.mov);
       } else if (op.op === 'borrar') {
         state.movimientos = state.movimientos.filter(function (m) { return m.id !== op.id; });
+        state.deudas = (state.deudas || []).filter(function (d) { return d.movId !== op.id; });
+      } else if (op.op === 'deudas') {
+        // Sustituye las deudas de un gasto por la lista nueva
+        state.deudas = (state.deudas || []).filter(function (d) { return d.movId !== op.movId; }).concat(op.lista || []);
+      } else if (op.op === 'debo') {
+        state.debo = state.debo || [];
+        var b = indexById(state.debo, op.debo.id);
+        if (b >= 0) state.debo[b] = op.debo; else state.debo.push(op.debo);
+      } else if (op.op === 'borrarDebo') {
+        state.debo = (state.debo || []).filter(function (d) { return d.id !== op.id; });
       } else if (op.op === 'config') {
         state.config[op.clave] = op.valor;
       } else if (op.op === 'presupuesto') {
@@ -436,7 +497,7 @@ var HuchaCore = (function () {
       (state.movimientos || []).forEach(function (m) {
         if (m.fecha < c.inicio || m.fecha > c.fin) return;
         if (m.tipo === 'ingreso') {
-          if (m.vinculado) return;
+          if (m.vinculado || m.pagaDeuda) return;
           if (m.reembolso) { gas -= num(m.importe); porCat[m.cat] = (porCat[m.cat] || 0) - num(m.importe); return; }
           ing += num(m.importe);
           if (m.nomina) nom += num(m.importe);
@@ -481,7 +542,7 @@ var HuchaCore = (function () {
         { id: 'gym', concepto: 'Gimnasio', tipo: 'gasto', importe: 25, cuenta: 'principal', cat: 'Salud y deporte', sub: 'Gimnasio', frecuencia: 'dias', cada: 28, proxima: addDays(hoy, 3), restantes: '', compromiso: true, activo: true },
         { id: 'internet', concepto: 'TV e internet', tipo: 'gasto', importe: 40, cuenta: 'principal', cat: 'Casa', sub: 'TV e internet', frecuencia: 'mensual', dia: 1, proxima: nextMonthly(hoy, 1), restantes: '', compromiso: true, activo: true }
       ],
-      movimientos: []
+      movimientos: [], deudas: [], debo: []
     };
     var demo = [
       [-5, 'gasto', 32.4, 'principal', 'Comida', 'Supermercado'], [-4, 'gasto', 12.9, 'principal', 'Comida', 'Restaurantes'],
@@ -493,6 +554,13 @@ var HuchaCore = (function () {
       st.movimientos.push(m);
       if (d[3] === 'principal') st.movimientos.push({ id: m.id + '-r', fecha: m.fecha, tipo: 'transferencia', importe: redondeo(d[2]), cuenta: 'principal', destino: 'hucha', cat: '', sub: '', nota: 'Redondeo', miParte: '', nomina: false, reembolso: false, vinculado: m.id, origen: 'redondeo', act: 0 });
     });
+    // Ejemplo de gasto compartido: cena de 90 € entre tres
+    var cena = { id: 'demo-cena', fecha: addDays(hoy, -3), tipo: 'gasto', importe: 90, cuenta: 'principal', destino: '', cat: 'Comida', sub: 'Restaurantes', nota: 'Cena cumpleaños', miParte: 30, nomina: false, reembolso: false, vinculado: '', origen: 'manual', act: 0 };
+    st.movimientos.push(cena);
+    st.deudas.push({ id: 'dd1', movId: cena.id, fecha: cena.fecha, persona: 'Ana', importe: 30, concepto: cena.nota });
+    st.deudas.push({ id: 'dd2', movId: cena.id, fecha: cena.fecha, persona: 'Luis', importe: 30, concepto: cena.nota });
+    st.movimientos.push({ id: 'demo-bizum', fecha: addDays(hoy, -1), tipo: 'ingreso', importe: 30, cuenta: 'principal', destino: '', cat: '', sub: '', nota: 'Bizum', miParte: '', nomina: false, reembolso: false, vinculado: '', pagaDeuda: 'Ana', origen: 'manual', act: 0 });
+    st.debo.push({ id: 'db1', persona: 'Marta', concepto: 'Entradas del concierto', importe: 35, fecha: addDays(hoy, -2) });
     return st;
   }
 
@@ -525,6 +593,7 @@ var HuchaCore = (function () {
     r2: r2, num: num, fmt: fmt, uid: uid, redondeo: redondeo, interesDiario: interesDiario,
     saldos: saldos, patrimonio: patrimonio, ciclos: ciclos, cicloDe: cicloDe, ocurrencias: ocurrencias,
     presupuesto: presupuesto, alertas: alertas, pendientesCobro: pendientesCobro, propuestaNomina: propuestaNomina,
+    deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
     procesarAutomaticos: procesarAutomaticos, aplicarOps: aplicarOps, estadisticas: estadisticas,
     categoriasBase: categoriasBase, estadoEjemplo: estadoEjemplo, parteMia: parteMia
   };
