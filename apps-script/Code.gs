@@ -74,7 +74,8 @@ var DESC_CONFIG = {
   cuentaSobrante: 'ID de la cuenta cuyo saldo es "lo que sobra" al cobrar',
   tarjetaSobrante: 'ID de la tarjeta de crédito cuya deuda se descuenta del sobrante',
   cuentaNomina: 'ID de la cuenta donde entra la nómina',
-  cuentaDefecto: 'Cuenta que aparece seleccionada al apuntar un gasto'
+  cuentaDefecto: 'Cuenta que aparece seleccionada al apuntar un gasto',
+  extrasDesde: 'Desde qué fecha los ingresos extra cuentan como la nómina (50 % ahorro / 50 % gasto)'
 };
 
 // ---------------------------------------------------------------- Instalación

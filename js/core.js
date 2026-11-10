@@ -157,10 +157,13 @@ var HuchaCore = (function () {
   // ---------- Presupuesto del ciclo ----------
   var REDONDEOS = 'Redondeos';
   var CUENTAS_DIARIAS = { diario: 1, efectivo: 1, pocket: 1, credito: 1 };
+  /** Desde qué día los ingresos extra cuentan como la nómina (los anteriores van íntegros al ahorro). */
+  var EXTRAS_DESDE = '2026-11-10';
+  function extrasDesde(state) { return (state.config && state.config.extrasDesde) || EXTRAS_DESDE; }
   /** Ingreso extra que cuenta como la nómina: no es nómina, reembolso, cobro de deuda ni intereses, y entra en una cuenta del día a día. */
-  function esIngresoExtra(m, tipos) {
+  function esIngresoExtra(m, tipos, desde) {
     return m.tipo === 'ingreso' && !m.nomina && !m.reembolso && !m.vinculado && !m.pagaDeuda &&
-      m.origen !== 'interes' && !!CUENTAS_DIARIAS[tipos[m.cuenta]];
+      m.origen !== 'interes' && !!CUENTAS_DIARIAS[tipos[m.cuenta]] && m.fecha >= desde;
   }
   function esVariable(m) { return !m.origen || m.origen === 'manual'; }
   function parteMia(m) { return m.miParte !== '' && m.miParte != null ? num(m.miParte) : num(m.importe); }
@@ -189,9 +192,9 @@ var HuchaCore = (function () {
     var enCiclo = (state.movimientos || []).filter(function (m) { return m.fecha >= ciclo.inicio && m.fecha <= ciclo.fin; });
 
     // Otros ingresos del ciclo (Stripe, ventas, Bizum en efectivo…): cuentan como la nómina.
-    var extras = 0, lineasExtras = [];
+    var extras = 0, lineasExtras = [], desdeExtras = extrasDesde(state);
     enCiclo.forEach(function (m) {
-      if (esIngresoExtra(m, tipos)) { extras += num(m.importe); lineasExtras.push({ concepto: m.nota || m.sub || 'Ingreso', fecha: m.fecha, importe: num(m.importe) }); }
+      if (esIngresoExtra(m, tipos, desdeExtras)) { extras += num(m.importe); lineasExtras.push({ concepto: m.nota || m.sub || 'Ingreso', fecha: m.fecha, importe: num(m.importe) }); }
     });
     extras = r2(extras);
     var base = r2(nomina + extras);
@@ -582,7 +585,8 @@ var HuchaCore = (function () {
     var queda = Math.max(0, p.restante);
     var saldo = s[sob] || 0;
     // Efectivo: cuenta lo que ha variado durante el ciclo (lo que tenías antes no es de esta nómina)
-    var antes = saldos(state, addDays(ciclo.inicio, -1)), efectivo = 0;
+    var desdeEf = ciclo.inicio > extrasDesde(state) ? ciclo.inicio : extrasDesde(state);
+    var antes = saldos(state, addDays(desdeEf, -1)), efectivo = 0;
     (state.cuentas || []).forEach(function (c) {
       if (c.tipo === 'efectivo' && c.activa !== false) efectivo += (s[c.id] || 0) - (antes[c.id] || 0);
     });
