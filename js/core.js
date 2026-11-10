@@ -156,6 +156,12 @@ var HuchaCore = (function () {
 
   // ---------- Presupuesto del ciclo ----------
   var REDONDEOS = 'Redondeos';
+  var CUENTAS_DIARIAS = { diario: 1, efectivo: 1, pocket: 1, credito: 1 };
+  /** Ingreso extra que cuenta como la nómina: no es nómina, reembolso, cobro de deuda ni intereses, y entra en una cuenta del día a día. */
+  function esIngresoExtra(m, tipos) {
+    return m.tipo === 'ingreso' && !m.nomina && !m.reembolso && !m.vinculado && !m.pagaDeuda &&
+      m.origen !== 'interes' && !!CUENTAS_DIARIAS[tipos[m.cuenta]];
+  }
   function esVariable(m) { return !m.origen || m.origen === 'manual'; }
   function parteMia(m) { return m.miParte !== '' && m.miParte != null ? num(m.miParte) : num(m.importe); }
 
@@ -176,12 +182,20 @@ var HuchaCore = (function () {
     (state.fijos || []).forEach(function (f) { fijosById[f.id] = f; });
     var nomina = ciclo.nomina ? num(ciclo.nomina.importe) : num(cfg.sueldo);
     var ahorroPct = num(cfg.ahorroPct);
-    var ahorroObjetivo = r2(nomina * ahorroPct / 100);
     var tipos = {};
     (state.cuentas || []).forEach(function (c) { tipos[c.id] = c.tipo; });
 
     var fijosPagados = 0, fijosPendientes = 0, pension = 0, porCat = {}, total = 0, lineasFijos = [];
     var enCiclo = (state.movimientos || []).filter(function (m) { return m.fecha >= ciclo.inicio && m.fecha <= ciclo.fin; });
+
+    // Otros ingresos del ciclo (Stripe, ventas, Bizum en efectivo…): cuentan como la nómina.
+    var extras = 0, lineasExtras = [];
+    enCiclo.forEach(function (m) {
+      if (esIngresoExtra(m, tipos)) { extras += num(m.importe); lineasExtras.push({ concepto: m.nota || m.sub || 'Ingreso', fecha: m.fecha, importe: num(m.importe) }); }
+    });
+    extras = r2(extras);
+    var base = r2(nomina + extras);
+    var ahorroObjetivo = r2(base * ahorroPct / 100);
 
     enCiclo.forEach(function (m) {
       if (m.origen && m.origen.indexOf('fijo:') === 0) {
@@ -227,7 +241,7 @@ var HuchaCore = (function () {
     });
 
     var fijos = r2(fijosPagados + fijosPendientes);
-    var disponible = r2(nomina - fijos - ahorroObjetivo);
+    var disponible = r2(base - fijos - ahorroObjetivo);
     var dias = diffDays(ciclo.inicio, ciclo.fin) + 1;
     var transcurridos = Math.min(dias, Math.max(1, diffDays(ciclo.inicio, hoy) + 1));
     var ritmo = transcurridos / dias;
@@ -236,7 +250,7 @@ var HuchaCore = (function () {
     var gastoPrevisto = transcurridos >= 7
       ? Math.max(total, Math.min(proyectado, Math.max(disponible, total) * 3))
       : Math.max(total, disponible);
-    var ahorroPrevisto = r2(nomina - fijos - gastoPrevisto);
+    var ahorroPrevisto = r2(base - fijos - gastoPrevisto);
     var restante = r2(disponible - total);
     var diasRestantes = Math.max(1, dias - transcurridos + 1);
 
@@ -252,7 +266,7 @@ var HuchaCore = (function () {
     lineasFijos.sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
 
     return {
-      ciclo: ciclo, nomina: nomina, nominaEstimada: !ciclo.nomina,
+      ciclo: ciclo, nomina: nomina, nominaEstimada: !ciclo.nomina, extras: extras, lineasExtras: lineasExtras, base: base,
       ahorroPct: ahorroPct, ahorroObjetivo: ahorroObjetivo,
       fijos: fijos, fijosPagados: r2(fijosPagados), fijosPendientes: r2(fijosPendientes), lineasFijos: lineasFijos,
       pension: r2(pension), disponible: disponible, gastado: r2(total), restante: restante,
@@ -567,9 +581,15 @@ var HuchaCore = (function () {
     });
     var queda = Math.max(0, p.restante);
     var saldo = s[sob] || 0;
+    // Efectivo: cuenta lo que ha variado durante el ciclo (lo que tenías antes no es de esta nómina)
+    var antes = saldos(state, addDays(ciclo.inicio, -1)), efectivo = 0;
+    (state.cuentas || []).forEach(function (c) {
+      if (c.tipo === 'efectivo' && c.activa !== false) efectivo += (s[c.id] || 0) - (antes[c.id] || 0);
+    });
+    efectivo = r2(efectivo);
     return {
-      cuenta: sob, saldo: r2(saldo), deuda: r2(deuda), deudaActual: r2(deudaActual), cargosTarjeta: cargosTarjeta, pendientes: r2(pendientes), queda: r2(queda),
-      ahorro: r2(saldo - deuda - pendientes - queda)
+      cuenta: sob, saldo: r2(saldo), efectivo: efectivo, deuda: r2(deuda), deudaActual: r2(deudaActual), cargosTarjeta: cargosTarjeta, pendientes: r2(pendientes), queda: r2(queda),
+      ahorro: r2(saldo + efectivo - deuda - pendientes - queda)
     };
   }
 

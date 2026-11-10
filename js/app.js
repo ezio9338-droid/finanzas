@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.11.0';
+  var VERSION = '1.12.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -252,9 +252,11 @@
       '<div class="row small"><span class="sec">Gastado <b class="num">' + fmt(p.gastado) + '</b> de ' + fmt(p.disponible) + '</span><span class="muted">▏ritmo ideal ' + Math.round(p.ritmo * 100) + ' %</span></div>' +
       '<details><summary>¿De dónde sale?</summary><ul class="list small" style="margin-top:6px">' +
       '<li><span class="grow">Nómina' + (p.nominaEstimada ? ' (estimada)' : '') + '</span><span class="amount">' + fmt(p.nomina) + '</span></li>' +
+      (p.extras ? '<li><span class="grow">Otros ingresos</span><span class="amount">+' + fmt(p.extras) + '</span></li>' +
+        p.lineasExtras.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + ' · ' + fCorta(l.fecha) + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') : '') +
       '<li><span class="grow">Gastos fijos del ciclo</span><span class="amount">−' + fmt(p.fijos) + '</span></li>' +
       p.lineasFijos.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + ' · ' + fCorta(l.fecha) + (l.pagado ? ' ✓' : '') + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') +
-      '<li><span class="grow">Objetivo de ahorro (' + p.ahorroPct + ' %)</span><span class="amount">−' + fmt(p.ahorroObjetivo) + '</span></li>' +
+      '<li><span class="grow">Objetivo de ahorro (' + p.ahorroPct + ' %' + (p.extras ? ' de ' + fmt(p.base) : '') + ')</span><span class="amount">−' + fmt(p.ahorroObjetivo) + '</span></li>' +
       '<li><span class="grow"><b>Para gastar</b></span><span class="amount">' + fmt(p.disponible) + '</span></li></ul>' +
       (ciclo.estimado ? '<p class="small muted">* El ciclo termina cuando registres la próxima nómina.</p>' : '') + '</details>' +
       '</div>';
@@ -274,6 +276,7 @@
         '<p class="small muted" style="margin:6px 0 4px">Si gastas exactamente lo que te queda. Sale de tu saldo real de ' + esc(nombreCuenta(ar.cuenta)) + ':</p>' +
         '<ul class="list small">' +
         '<li><span class="grow sec">' + esc(nombreCuenta(ar.cuenta)) + ' hoy</span><span class="amount num">' + fmt(ar.saldo) + '</span></li>' +
+        (ar.efectivo ? '<li><span class="grow sec">' + (ar.efectivo > 0 ? '+ Efectivo que te ha entrado' : '− Efectivo gastado') + ' este ciclo</span><span class="amount num">' + (ar.efectivo > 0 ? '+' : '−') + fmt(Math.abs(ar.efectivo)) + '</span></li>' : '') +
         (ar.deuda ? '<li><span class="grow sec">− Tarjeta de crédito, se paga el día 1' +
           '<div class="subline">' + (ar.deudaActual ? 'debes ' + fmt(ar.deudaActual) : 'no debes nada aún') +
           (ar.cargosTarjeta.length ? ' + aún se cargarán ' + esc(ar.cargosTarjeta.map(function (c) { return c.concepto + ' ' + C.fmt(c.importe); }).join(', ')) : '') +

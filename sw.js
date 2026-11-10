@@ -1,7 +1,7 @@
 /* Hucha · service worker: la app funciona sin conexión */
-var CACHE = 'hucha-v19';
+var CACHE = 'hucha-v20';
 var ARCHIVOS = [
-  './', 'index.html', 'css/app.css?v=19', 'js/core.js?v=19', 'js/vault.js?v=19', 'js/icons.js?v=19', 'js/charts.js?v=19', 'js/app.js?v=19',
+  './', 'index.html', 'css/app.css?v=20', 'js/core.js?v=20', 'js/vault.js?v=20', 'js/icons.js?v=20', 'js/charts.js?v=20', 'js/app.js?v=20',
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 self.addEventListener('install', function (e) {
