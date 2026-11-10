@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.12.2';
+  var VERSION = '1.13.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -253,7 +253,7 @@
       '<details><summary>¿De dónde sale?</summary><ul class="list small" style="margin-top:6px">' +
       '<li><span class="grow">Nómina' + (p.nominaEstimada ? ' (estimada)' : '') + '</span><span class="amount">' + fmt(p.nomina) + '</span></li>' +
       (p.extras ? '<li><span class="grow">Otros ingresos</span><span class="amount">+' + fmt(p.extras) + '</span></li>' +
-        p.lineasExtras.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + ' · ' + fCorta(l.fecha) + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') : '') +
+        p.lineasExtras.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + (l.concepto.indexOf('Efectivo ingresado') === 0 ? '' : ' · ' + fCorta(l.fecha)) + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') : '') +
       '<li><span class="grow">Gastos fijos del ciclo</span><span class="amount">−' + fmt(p.fijos) + '</span></li>' +
       p.lineasFijos.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + ' · ' + fCorta(l.fecha) + (l.pagado ? ' ✓' : '') + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') +
       '<li><span class="grow">Objetivo de ahorro (' + p.ahorroPct + ' %' + (p.extras ? ' de ' + fmt(p.base) : '') + ')</span><span class="amount">−' + fmt(p.ahorroObjetivo) + '</span></li>' +

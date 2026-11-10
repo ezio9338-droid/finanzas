@@ -197,6 +197,16 @@ var HuchaCore = (function () {
     enCiclo.forEach(function (m) {
       if (esIngresoExtra(m, tipos, desdeExtras)) { extras += num(m.importe); lineasExtras.push({ concepto: m.nota || m.sub || 'Ingreso', fecha: m.fecha, importe: num(m.importe) }); }
     });
+    // Efectivo ingresado en el banco (dinero que pasa a ser digital): cuenta como ingreso extra.
+    // Se netea con lo que saques al cajero en el mismo ciclo para no contar dos veces tu propio dinero.
+    var ingresadoEf = 0;
+    enCiclo.forEach(function (m) {
+      if (m.tipo !== 'transferencia' || m.fecha < desdeExtras) return;
+      var de = tipos[m.cuenta], a = tipos[m.destino];
+      if (de === 'efectivo' && CUENTAS_DIARIAS[a]) ingresadoEf += num(m.importe);
+      else if (a === 'efectivo' && CUENTAS_DIARIAS[de]) ingresadoEf -= num(m.importe);
+    });
+    if (ingresadoEf > 0.004) { extras += ingresadoEf; lineasExtras.push({ concepto: 'Efectivo ingresado en el banco (neto)', fecha: ciclo.inicio > desdeExtras ? ciclo.inicio : desdeExtras, importe: r2(ingresadoEf) }); }
     extras = r2(extras);
     var base = r2(nomina + extras);
     var ahorroObjetivo = r2(base * ahorroPct / 100);
