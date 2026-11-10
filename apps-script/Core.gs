@@ -156,7 +156,8 @@ var HuchaCore = (function () {
 
   // ---------- Presupuesto del ciclo ----------
   var REDONDEOS = 'Redondeos';
-  var CUENTAS_DIARIAS = { diario: 1, efectivo: 1, pocket: 1, credito: 1 };
+  // El metálico no cuenta: no se puede repartir a final de ciclo al no estar en una cuenta.
+  var CUENTAS_DIARIAS = { diario: 1, pocket: 1, credito: 1 };
   /** Desde qué día los ingresos extra cuentan como la nómina (los anteriores van íntegros al ahorro). */
   var EXTRAS_DESDE = '2026-11-10';
   function extrasDesde(state) { return (state.config && state.config.extrasDesde) || EXTRAS_DESDE; }
@@ -584,13 +585,8 @@ var HuchaCore = (function () {
     });
     var queda = Math.max(0, p.restante);
     var saldo = s[sob] || 0;
-    // Efectivo: cuenta lo que ha variado durante el ciclo (lo que tenías antes no es de esta nómina)
-    var desdeEf = ciclo.inicio > extrasDesde(state) ? ciclo.inicio : extrasDesde(state);
-    var antes = saldos(state, addDays(desdeEf, -1)), efectivo = 0;
-    (state.cuentas || []).forEach(function (c) {
-      if (c.tipo === 'efectivo' && c.activa !== false) efectivo += (s[c.id] || 0) - (antes[c.id] || 0);
-    });
-    efectivo = r2(efectivo);
+    // El metálico no entra en el reparto (no está en una cuenta).
+    var efectivo = 0;
     return {
       cuenta: sob, saldo: r2(saldo), efectivo: efectivo, deuda: r2(deuda), deudaActual: r2(deudaActual), cargosTarjeta: cargosTarjeta, pendientes: r2(pendientes), queda: r2(queda),
       ahorro: r2(saldo + efectivo - deuda - pendientes - queda)
