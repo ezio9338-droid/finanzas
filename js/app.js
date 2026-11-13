@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.14.0';
+  var VERSION = '1.15.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -555,7 +555,7 @@
 
     if (saldados.length) {
       h += '<div class="card"><h2>Saldadas</h2><ul class="list">' + saldados.map(function (d) {
-        return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">' + ico('check') + '</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">Te pagó ' + fmt(d.pagado) + ' en total</div></div><span class="muted">›</span></li>';
+        return '<li class="tap" data-act="persona" data-id="' + esc(d.persona) + '"><span class="avatar">' + ico('check') + '</span><div class="grow"><div class="title">' + esc(d.persona) + '</div><div class="subline">' + (d.pendiente < -0.004 ? 'Tiene ' + fmt(-d.pendiente) + ' a su favor' : 'Te pagó ' + fmt(d.pagado) + ' en total') + '</div></div><span class="muted">›</span></li>';
       }).join('') + '</ul></div>';
     }
     return h;
@@ -566,7 +566,7 @@
     if (!d) return;
     var h = '<h3 class="catname">' + ico('user') + esc(d.persona) + '</h3>' +
       '<div class="hero num" style="font-size:32px;color:' + (d.pendiente > 0 ? 'var(--pos-text)' : 'var(--text)') + '">' + fmt(Math.max(0, d.pendiente)) + '</div>' +
-      '<p class="small muted" style="margin-top:0">' + (d.pendiente > 0 ? 'te debe' : 'está al día') + ' · total ' + fmt(d.total) + ' · pagado ' + fmt(d.pagado) + '</p>';
+      '<p class="small muted" style="margin-top:0">' + (d.pendiente > 0 ? 'te debe' : d.pendiente < -0.004 ? 'tiene ' + fmt(-d.pendiente) + ' a su favor' : 'está al día') + ' · total ' + fmt(d.total) + ' · pagado ' + fmt(d.pagado) + '</p>';
     if (d.pendiente > 0 && d.persona !== C.SIN_ASIGNAR) h += '<button class="btn primary block" id="p-pago">Me ha pagado</button>';
     h += '<div class="group-title" style="margin-top:14px">Gastos compartidos</div><ul class="list">' + d.deudas.slice().sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }).map(function (x) {
       var it = d.items.filter(function (i) { return i.deuda.id === x.id; })[0];
@@ -916,6 +916,22 @@
       pagaDeuda: salda, origen: orig.origen || 'manual', act: Date.now()
     };
     var ops = [{ op: 'mov', mov: mov }];
+    // Pago de una deuda mayor de lo que te deben (redondeo, propina…): ¿te lo quedas o queda a su favor?
+    var teniaExtra = V.movimientos.some(function (m) { return m.id === id + '-extra'; }), conExtra = false;
+    if (salda) {
+      var sinEste = clone(V);
+      sinEste.movimientos = sinEste.movimientos.filter(function (m) { return m.id !== id && m.id !== id + '-extra'; });
+      var dp = C.deudas(sinEste).filter(function (d) { return C.clavePersona(d.persona) === C.clavePersona(salda); })[0];
+      var debia = dp ? Math.max(0, dp.pendiente) : 0, exceso = C.r2(imp - debia);
+      if (exceso > 0.004 && confirm(salda + ' te paga ' + fmt(exceso) + ' más de lo que te debía (' + fmt(debia) + ').\n\n' +
+        'Aceptar → te lo quedas: cuenta como ingreso extra.\nCancelar → queda a su favor y se descontará de lo próximo que te deba.')) {
+        conExtra = true;
+        if (debia > 0.004) mov.importe = C.r2(debia);
+        else { mov.pagaDeuda = ''; mov.cat = 'Ingresos'; mov.sub = 'Otros ingresos'; }
+        if (debia > 0.004) ops.push({ op: 'mov', mov: { id: id + '-extra', fecha: mov.fecha, tipo: 'ingreso', importe: exceso, cuenta: mov.cuenta, destino: '', cat: 'Ingresos', sub: 'Otros ingresos', nota: 'Redondeo de ' + salda, miParte: '', nomina: false, reembolso: false, vinculado: '', pagaDeuda: '', origen: 'manual', act: Date.now() } });
+      }
+    }
+    if (teniaExtra && !(conExtra && mov.pagaDeuda)) ops.push({ op: 'borrar', id: id + '-extra' });
     var teniaDeudas = (V.deudas || []).some(function (d) { return d.movId === id; });
     if (puedeDeudas() && (personas.length || teniaDeudas)) {
       ops.push({ op: 'deudas', movId: id, lista: personas.map(function (pp, i) {
@@ -938,6 +954,7 @@
     if (!confirm('¿Borrar este movimiento?')) return;
     var ops = [{ op: 'borrar', id: id }];
     if (V.movimientos.some(function (m) { return m.id === id + '-r'; })) ops.push({ op: 'borrar', id: id + '-r' });
+    if (V.movimientos.some(function (m) { return m.id === id + '-extra'; })) ops.push({ op: 'borrar', id: id + '-extra' });
     cerrarHoja(); commit(ops); toast('Borrado');
   }
 
