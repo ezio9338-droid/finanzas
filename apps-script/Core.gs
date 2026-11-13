@@ -206,7 +206,11 @@ var HuchaCore = (function () {
       if (de === 'efectivo' && CUENTAS_DIARIAS[a]) ingresadoEf += num(m.importe);
       else if (a === 'efectivo' && CUENTAS_DIARIAS[de]) ingresadoEf -= num(m.importe);
     });
-    if (ingresadoEf > 0.004) { extras += ingresadoEf; lineasExtras.push({ concepto: 'Efectivo ingresado en el banco (neto)', fecha: ciclo.inicio > desdeExtras ? ciclo.inicio : desdeExtras, importe: r2(ingresadoEf) }); }
+    // Lo cobrado en efectivo por deudas o reembolsos no es dinero nuevo: se descuenta antes de contar el ingresado.
+    enCiclo.forEach(function (m) {
+      if (m.tipo === 'ingreso' && m.fecha >= desdeExtras && tipos[m.cuenta] === 'efectivo' && (m.pagaDeuda || m.reembolso || m.vinculado)) ingresadoEf -= num(m.importe);
+    });
+    if (ingresadoEf > 0.004) { extras += ingresadoEf; lineasExtras.push({ concepto: 'Efectivo nuevo ingresado en el banco', fecha: ciclo.inicio > desdeExtras ? ciclo.inicio : desdeExtras, importe: r2(ingresadoEf) }); }
     extras = r2(extras);
     var base = r2(nomina + extras);
     var ahorroObjetivo = r2(base * ahorroPct / 100);
