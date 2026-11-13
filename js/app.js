@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.13.0';
+  var VERSION = '1.14.0';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -818,7 +818,7 @@
               '<input class="input num" data-p="' + i + '" data-pk="importe" inputmode="decimal" placeholder="0,00" value="' + esc(pp.importe) + '">' +
               '<button class="btn small" data-f="quitar-persona" data-v="' + i + '" aria-label="Quitar">✕</button></div>';
           });
-          h += '<div class="inline" style="margin-top:6px"><button class="btn small" data-f="add-persona">＋ Añadir persona</button><button class="btn small" data-f="repartir">Repartir a partes iguales</button></div>';
+          h += '<div class="inline" style="margin-top:6px"><button class="btn small" data-f="add-persona">＋ Añadir persona</button><button class="btn small" data-f="repartir">Repartir incluyéndome</button><button class="btn small" data-f="repartir-sin-mi">Todo para ellos</button></div>';
           h += '<datalist id="dl-personas">' + C.personasConocidas(V).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
         } else h += '<p class="small muted">Para repartir entre personas, actualiza el Apps Script (ver chat/README).</p>';
         h += '</div>';
@@ -952,13 +952,18 @@
     if (key === 'cancelar') return cerrarHoja();
     if (key === 'add-persona') { f.personas.push({ nombre: '', importe: '' }); pintarForm(); return; }
     if (key === 'quitar-persona') { f.personas.splice(+v, 1); pintarForm(); return; }
-    if (key === 'repartir') {
-      var tot = C.num(f.importe), n = f.personas.length || 1;
+    if (key === 'repartir' || key === 'repartir-sin-mi') {
+      var tot = C.num(f.importe), n = f.personas.length || 1, sinMi = key === 'repartir-sin-mi';
       if (!f.personas.length) f.personas.push({ nombre: '', importe: '' });
       if (!(tot > 0)) { toast('Escribe primero el importe total'); return; }
-      var cada = C.r2(tot / (n + 1));
-      f.personas.forEach(function (pp) { pp.importe = String(cada).replace('.', ','); });
-      f.miParte = String(C.r2(tot - cada * n)).replace('.', ',');
+      // Incluyéndome: total entre ellos y yo (los céntimos sobrantes, para mí).
+      // Todo para ellos: mi parte 0 y el total entre ellos (los céntimos, al último).
+      var cada = C.r2(tot / (sinMi ? n : n + 1));
+      f.personas.forEach(function (pp, i) {
+        var imp = sinMi && i === n - 1 ? C.r2(tot - cada * (n - 1)) : cada;
+        pp.importe = String(imp).replace('.', ',');
+      });
+      f.miParte = sinMi ? '0' : String(C.r2(tot - cada * n)).replace('.', ',');
       pintarForm(); return;
     }
     if (b.type === 'checkbox') {
