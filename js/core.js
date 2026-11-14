@@ -601,9 +601,11 @@ var HuchaCore = (function () {
     var saldo = s[sob] || 0;
     // El metálico no entra en el reparto (no está en una cuenta).
     var efectivo = 0;
+    // Lo que debes a otras personas (préstamos, pagos de más) no es tuyo: no se reparte.
+    var debes = r2(deudas(state).reduce(function (a, d) { return a + (d.pendiente < -0.004 ? -d.pendiente : 0); }, 0));
     return {
       cuenta: sob, saldo: r2(saldo), efectivo: efectivo, deuda: r2(deuda), deudaActual: r2(deudaActual), cargosTarjeta: cargosTarjeta, pendientes: r2(pendientes), queda: r2(queda),
-      ahorro: r2(saldo + efectivo - deuda - pendientes - queda)
+      debes: debes, ahorro: r2(saldo + efectivo - deuda - pendientes - queda - debes)
     };
   }
 
