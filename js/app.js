@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.18.2';
+  var VERSION = '1.18.3';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -69,7 +69,7 @@
 
   // ---------------------------------------------------------------- estado
   var snapshot = null, queue = [], V = null;
-  var ui = { tab: 'inicio', statIdx: null, filtro: { tipo: 'todos', cuenta: '', q: '', intereses: false }, limite: 150 };
+  var ui = { abiertos: {}, tab: 'inicio', statIdx: null, filtro: { tipo: 'todos', cuenta: '', q: '', intereses: false }, limite: 150 };
   var sync = { estado: 'idle', ultimo: LS.get('ultimoSync', 0), error: '' }, syncing = false, syncTimer = null;
 
   var sesion = { url: '', clave: '' }, llave = null, caja = null, seguridad = null, servidorVersion = 0;
@@ -250,7 +250,7 @@
       '<div class="sec">' + (p.restante > 0 ? '≈ <b>' + fmt(p.porDia) + '</b> al día durante ' + p.diasRestantes + ' días' : 'Intenta no gastar más hasta la nómina') + '</div>' +
       '<div class="bar" role="progressbar" aria-valuenow="' + Math.round(pct * 100) + '" aria-valuemin="0" aria-valuemax="100"><div class="fill ' + cls + '" style="width:' + Math.min(100, pct * 100) + '%"></div><div class="mark" style="left:calc(' + (p.ritmo * 100) + '% - 1px)" title="Ritmo ideal"></div></div>' +
       '<div class="row small"><span class="sec">Gastado <b class="num">' + fmt(p.gastado) + '</b> de ' + fmt(p.disponible) + '</span><span class="muted">▏ritmo ideal ' + Math.round(p.ritmo * 100) + ' %</span></div>' +
-      '<details><summary>¿De dónde sale?</summary><ul class="list small" style="margin-top:6px">' +
+      '<details data-key="presupuesto"' + (ui.abiertos.presupuesto ? ' open' : '') + '><summary>¿De dónde sale?</summary><ul class="list small" style="margin-top:6px">' +
       '<li><span class="grow">Nómina' + (p.nominaEstimada ? ' (estimada)' : '') + '</span><span class="amount">' + fmt(p.nomina) + '</span></li>' +
       (p.extras ? '<li><span class="grow">Otros ingresos</span><span class="amount">+' + fmt(p.extras) + '</span></li>' +
         p.lineasExtras.map(function (l) { return '<li style="padding:4px 0 4px 12px"><span class="grow muted">' + esc(l.concepto) + (l.concepto.indexOf('Efectivo nuevo') === 0 ? '' : ' · ' + fCorta(l.fecha)) + '</span><span class="muted num">' + fmt(l.importe) + '</span></li>'; }).join('') : '') +
@@ -273,6 +273,7 @@
         '<div style="font-size:30px;font-weight:600;letter-spacing:-.02em" class="num">' + fmtGrande(aho) + '</div></div>' +
         '<div class="small ' + (okObj ? 'amount pos' : 'muted') + '">' + (okObj ? '✓ objetivo' : Math.round(rr * 100) + ' % del objetivo') + '</div></div>' +
         '<div class="bar thin"><div class="fill ' + (okObj ? 'good' : 'serious') + '" style="width:' + (rr * 100) + '%"></div></div>' +
+        '<details data-key="ahorro"' + (ui.abiertos.ahorro ? ' open' : '') + '><summary>¿De dónde sale?</summary>' +
         '<p class="small muted" style="margin:6px 0 4px">Si gastas exactamente lo que te queda. Sale de tu saldo real de ' + esc(nombreCuenta(ar.cuenta)) + ':</p>' +
         '<ul class="list small">' +
         '<li><span class="grow sec">' + esc(nombreCuenta(ar.cuenta)) + ' hoy</span><span class="amount num">' + fmt(ar.saldo) + '</span></li>' +
@@ -287,7 +288,7 @@
         '<li><span class="grow"><b>= Ahorro</b> → Inversión ' + p.repartoInversion + ' % · Remunerada ' + (100 - p.repartoInversion) + ' %</span><span class="amount num">' + fmt(inv) + ' · ' + fmt(rem) + '</span></li>' +
         '</ul>' +
         (!okObj && aho < obj - 5 ? '<p class="small" style="color:var(--warning);margin:6px 0 0">Te faltan ' + fmt(obj - aho) + ' para el objetivo. Suele ser un gasto sin apuntar o un pago del mes anterior (p. ej. la tarjeta) hecho con esta nómina.</p>' : '') +
-        '</div>';
+        '</details></div>';
     }
 
     if (meDeben > 0) {
@@ -1450,6 +1451,12 @@
       commit([{ op: 'presupuesto', cat: t.dataset.pres, valor: val }]); toast('Presupuesto guardado');
     }
   });
+
+  // Recordar qué desplegables están abiertos aunque la pantalla se repinte
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d && d.dataset && d.dataset.key) ui.abiertos[d.dataset.key] = d.open;
+  }, true);
 
   var qTimer = null;
   document.addEventListener('input', function (e) {
