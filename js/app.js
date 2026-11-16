@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.18.1';
+  var VERSION = '1.18.2';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -759,6 +759,7 @@
     h += '<div class="card"><h2>Datos</h2><div class="stack">' +
       '<button class="btn block" data-act="exportar">Descargar copia de seguridad (JSON)</button>' +
       '<button class="btn block danger" data-act="reset">Desconectar y borrar datos de este dispositivo</button></div>' +
+      '<button class="btn block" data-act="actualizar-app" style="margin-top:8px">Buscar actualización</button>' +
       '<p class="small muted">Hucha ' + VERSION + ' · Tus datos viven en tu hoja de Google y, cifrados, en este dispositivo.</p></div>';
     return h;
   }
@@ -1432,6 +1433,7 @@
     else if (act === 'proteger') abrirProteccion(false);
     else if (act === 'reconectar') { if (confirm('Se borrarán los datos guardados en este dispositivo (tu hoja de Google no se toca) y tendrás que conectar de nuevo con la URL y la clave secreta. ¿Seguir?')) borrarTodo(); }
     else if (act === 'exportar') exportar();
+    else if (act === 'actualizar-app') actualizarApp();
     else if (act === 'reset') resetear();
     else if (act === 'salir-demo') { LS.del('demo'); snapshot = null; V = null; render(); }
   });
@@ -1508,6 +1510,18 @@
     });
   }
 
+  /** Fuerza buscar la última versión publicada: actualiza el service worker, vacía su caché y recarga. */
+  function actualizarApp() {
+    if (queue.length && !confirm('Hay ' + queue.length + ' cambio(s) sin sincronizar. Se guardarán y se enviarán al volver. ¿Recargar?')) return;
+    toast('Buscando la última versión…');
+    var p = navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }) : Promise.resolve();
+    p.catch(function () {}).then(function () {
+      return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null;
+    }).catch(function () {}).then(function () {
+      setTimeout(function () { location.replace(location.pathname + '?v=' + Date.now()); }, 300);
+    });
+  }
+
   function exportar() {
     if (!confirm('La copia se descarga SIN cifrar. Guárdala en un sitio seguro y bórrala cuando no la necesites. ¿Descargar?')) return;
     var blob = new Blob([JSON.stringify(V, null, 2)], { type: 'application/json' });
@@ -1550,7 +1564,9 @@
       });
     });
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) reg.update().catch(function () {}); });
+      }).catch(function () {});
     }
     setInterval(function () { if (V && modo() === 'online' && !document.hidden) hacerSync(); }, 5 * 60000);
   }
