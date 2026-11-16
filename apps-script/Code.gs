@@ -527,4 +527,26 @@ function actualizarResumen(st) {
     sh.getRange(2, 9, filas.length, cab.length - 8).setNumberFormat('#,##0.00 "€"');
   }
   sh.getRange(filas.length + 3, 1).setValue('Ciclo = de nómina a nómina. Se actualiza solo cada día y con cada cambio desde la app.').setFontStyle('italic').setFontColor('#777777');
+
+  // Detalle por subcategoría (una fila por ciclo, categoría y subcategoría), para afinar presupuestos
+  var sh2 = ss.getSheetByName('Resumen subcategorías') || ss.insertSheet('Resumen subcategorías');
+  var cab2 = ['Inicio ciclo', 'Fin ciclo', 'Categoría', 'Subcategoría', 'Gasto'], filas2 = [];
+  stats.slice().reverse().forEach(function (s) {
+    Object.keys(s.porSubcategoria || {}).forEach(function (cat) {
+      Object.keys(s.porSubcategoria[cat]).forEach(function (sub) {
+        var v = s.porSubcategoria[cat][sub];
+        if (Math.abs(v) < 0.005) return;
+        var p1 = s.inicio.split('-'), p2 = s.fin.split('-');
+        filas2.push([new Date(+p1[0], +p1[1] - 1, +p1[2]), new Date(+p2[0], +p2[1] - 1, +p2[2]), cat || 'Sin categoría', sub || 'Sin subcategoría', v]);
+      });
+    });
+  });
+  sh2.clear();
+  sh2.getRange(1, 1, 1, cab2.length).setValues([cab2]).setFontWeight('bold').setBackground('#1f3a5f').setFontColor('#ffffff');
+  sh2.setFrozenRows(1);
+  if (filas2.length) {
+    sh2.getRange(2, 1, filas2.length, cab2.length).setValues(filas2);
+    sh2.getRange(2, 1, filas2.length, 2).setNumberFormat('dd/mm/yyyy');
+    sh2.getRange(2, 5, filas2.length, 1).setNumberFormat('#,##0.00 "€"');
+  }
 }

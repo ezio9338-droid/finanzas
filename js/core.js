@@ -654,32 +654,34 @@ var HuchaCore = (function () {
     var cs = ciclos(state, hoy), fijosById = {};
     (state.fijos || []).forEach(function (f) { fijosById[f.id] = f; });
     return cs.map(function (c) {
-      var ing = 0, nom = 0, intereses = 0, gas = 0, porCat = {};
+      var ing = 0, nom = 0, intereses = 0, gas = 0, porCat = {}, porSub = {};
+      function sumaSub(cat, sub, v) { var c2 = porSub[cat] = porSub[cat] || {}; c2[sub || ''] = (c2[sub || ''] || 0) + v; }
       (state.movimientos || []).forEach(function (m) {
         if (m.fecha < c.inicio || m.fecha > c.fin) return;
         if (m.tipo === 'ingreso') {
           if (m.vinculado || m.pagaDeuda) return;
-          if (m.reembolso) { gas -= num(m.importe); porCat[m.cat] = (porCat[m.cat] || 0) - num(m.importe); return; }
+          if (m.reembolso) { gas -= num(m.importe); porCat[m.cat] = (porCat[m.cat] || 0) - num(m.importe); sumaSub(m.cat, m.sub, -num(m.importe)); return; }
           ing += num(m.importe);
           if (m.nomina) nom += num(m.importe);
           if (m.origen === 'interes') intereses += num(m.importe);
         } else if (m.tipo === 'gasto') {
-          var p = parteMia(m); gas += p; porCat[m.cat] = (porCat[m.cat] || 0) + p;
+          var p = parteMia(m); gas += p; porCat[m.cat] = (porCat[m.cat] || 0) + p; sumaSub(m.cat, m.sub, p);
         } else if (m.tipo === 'transferencia' && m.origen === 'redondeo') {
-          gas += num(m.importe); porCat[REDONDEOS] = (porCat[REDONDEOS] || 0) + num(m.importe);
+          gas += num(m.importe); porCat[REDONDEOS] = (porCat[REDONDEOS] || 0) + num(m.importe); sumaSub(REDONDEOS, '', num(m.importe));
         } else if (m.tipo === 'transferencia' && m.origen && m.origen.indexOf('fijo:') === 0) {
           // Transferencias fijas que cuentan en presupuesto (plan de pensiones, cuota…) = gasto
           var fj = fijosById[m.origen.slice(5)];
-          if (fj && fj.compromiso) { var k = fj.cat || fj.concepto || 'Fijos'; gas += num(m.importe); porCat[k] = (porCat[k] || 0) + num(m.importe); }
+          if (fj && fj.compromiso) { var k = fj.cat || fj.concepto || 'Fijos'; gas += num(m.importe); porCat[k] = (porCat[k] || 0) + num(m.importe); sumaSub(k, fj.cat ? fj.sub : '', num(m.importe)); }
         }
       });
       var hasta = c.fin < hoy ? c.fin : hoy;
       Object.keys(porCat).forEach(function (k) { porCat[k] = r2(porCat[k]); });
+      Object.keys(porSub).forEach(function (k) { Object.keys(porSub[k]).forEach(function (sb) { porSub[k][sb] = r2(porSub[k][sb]); }); });
       return {
         inicio: c.inicio, fin: c.fin, actual: c.estimado,
         ingresos: r2(ing), nomina: r2(nom), intereses: r2(intereses), gastos: r2(gas),
         ahorro: r2(ing - gas), tasaAhorro: ing > 0 ? (ing - gas) / ing : null,
-        patrimonio: patrimonio(state, hasta), porCategoria: porCat
+        patrimonio: patrimonio(state, hasta), porCategoria: porCat, porSubcategoria: porSub
       };
     });
   }

@@ -422,3 +422,10 @@ h3.catname svg.ic { width: 22px; height: 22px; }
 /* Sin zoom: ni doble toque ni pellizco */
 html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 button, a, input, select, label, .tap { touch-action: manipulation; }
+
+/* Estadísticas: subcategorías desplegables */
+details.catdet > summary { list-style: none; cursor: pointer; }
+details.catdet > summary::-webkit-details-marker { display: none; }
+details.catdet[open] > summary .catname { color: var(--accent); }
+.subcats { margin: 0 0 8px 27px; }
+.subcats > li { padding: 7px 0; }
