@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.17.1';
+  var VERSION = '1.18.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -413,7 +413,9 @@
 
   function vistaEstadisticas() {
     var t = hoy(), stats = C.estadisticas(V, t);
-    if (ui.statIdx === null || ui.statIdx >= stats.length) ui.statIdx = stats.length - 1;
+    // Si aparece un ciclo nuevo (o es la primera vez), se muestra el más reciente
+    if (ui.statIdx === null || ui.statIdx >= stats.length || ui.statLen !== stats.length) ui.statIdx = stats.length - 1;
+    ui.statLen = stats.length;
     var s = stats[ui.statIdx];
     var h = topbar('Estadísticas');
     h += '<div class="card"><div class="row" style="margin-bottom:10px"><button class="btn small" data-act="stat-prev"' + (ui.statIdx <= 0 ? ' disabled' : '') + ' aria-label="Ciclo anterior">‹</button>' +
@@ -439,6 +441,69 @@
             (x.v > 0 ? '<div class="bar thin" style="margin-top:4px"><div class="fill" style="width:' + (x.v / maxSub * 100) + '%;opacity:.7"></div></div>' : '') + '</div></li>';
         }).join('') + '</ul>' : '') + '</details>';
     }).join('') : '<div class="empty-state">Sin gastos en este ciclo.</div>') + '</div>';
+
+    // --- Gasto del ciclo día a día frente al ritmo ideal
+    var cSel = C.ciclos(V, t)[ui.statIdx], hastaSel = cSel.fin < t ? cSel.fin : t;
+    var pSel = C.presupuesto(V, cSel, hastaSel), dias = C.gastoPorDia(V, cSel), nDias = dias.length;
+    var hoyIdx = cSel.fin < t ? nDias : Math.min(nDias, C.diffDays(cSel.inicio, t) + 1), acum = [], suma = 0;
+    dias.slice(0, hoyIdx).forEach(function (d) { suma += d.importe; acum.push(C.r2(suma)); });
+    var ideal = dias.map(function (_, i) { return C.r2(pSel.disponible * (i + 1) / nDias); });
+    var idealHoy = ideal[Math.max(0, hoyIdx - 1)] || 0, dif = C.r2(suma - idealHoy);
+    h += '<div class="card"><h2>Gasto del ciclo día a día</h2>' +
+      '<div class="legend"><span><i style="background:var(--series-1)"></i>Gasto variable acumulado</span><span><i style="background:transparent;border-top:2px dashed var(--text-2);border-radius:0;height:0;width:14px;vertical-align:3px"></i>Ritmo ideal</span></div>' +
+      CH.acumulado(acum, ideal, dias.map(function (d) { return fCorta(d.fecha); }), { aria: 'Gasto acumulado del ciclo frente al ritmo ideal' }) +
+      '<p class="small sec" style="margin:6px 0 0">' + (s.actual ? 'Llevas ' : 'Gastaste ') + '<b>' + fmt(suma) + '</b> de ' + fmt(pSel.disponible) + '. ' +
+      (Math.abs(dif) < 1 ? 'Vas justo al ritmo ideal.' : dif > 0 ? '<span style="color:var(--neg-text)">' + fmt(dif) + ' por encima</span> del ritmo ideal' + (s.actual ? ' a día de hoy.' : '.') : '<span style="color:var(--pos-text)">' + fmt(-dif) + ' por debajo</span> del ritmo ideal' + (s.actual ? ' a día de hoy.' : '.')) + '</p></div>';
+
+    // --- Comparación con el ciclo anterior, por categoría
+    h += '<div class="card"><h2>Comparado con el ciclo anterior</h2>';
+    if (ui.statIdx > 0) {
+      var prev = stats[ui.statIdx - 1], nombres = {};
+      Object.keys(s.porCategoria).concat(Object.keys(prev.porCategoria)).forEach(function (k) { nombres[k] = 1; });
+      var filasCmp = Object.keys(nombres).map(function (k) { return { cat: k, a: s.porCategoria[k] || 0, b: prev.porCategoria[k] || 0 }; })
+        .filter(function (x) { return Math.abs(x.a) > 0.004 || Math.abs(x.b) > 0.004; }).sort(function (x, y) { return Math.max(y.a, y.b) - Math.max(x.a, x.b); });
+      var maxCmp = Math.max.apply(null, filasCmp.map(function (x) { return Math.max(x.a, x.b); }).concat([0.01]));
+      h += '<div class="legend"><span><i style="background:var(--series-1)"></i>Este ciclo' + (s.actual ? ' (en curso)' : '') + '</span><span><i style="background:var(--axis)"></i>Anterior (' + fCorta(prev.inicio) + ')</span></div>' +
+        filasCmp.map(function (x) {
+          var d = C.r2(x.a - x.b), pct = x.b > 0.004 ? Math.round(d / x.b * 100) : null;
+          var txt = Math.abs(d) < 0.01 ? '<span class="muted">=</span>' : '<span style="color:' + (d > 0 ? 'var(--neg-text)' : 'var(--pos-text)') + '">' + (d > 0 ? '▲ +' : '▼ ') + fmt(d) + (pct !== null ? ' (' + (pct > 0 ? '+' : '') + pct + ' %)' : '') + '</span>';
+          return '<div class="catrow"><div class="row small"><span class="catname">' + iconoCat(x.cat) + esc(x.cat || 'Sin categoría') + '</span><span class="num">' + txt + '</span></div>' +
+            '<div class="bar thin" style="margin:6px 0 3px"><div class="fill" style="width:' + Math.max(0, x.a / maxCmp * 100) + '%"></div></div>' +
+            '<div class="bar thin" style="margin:0"><div class="fill" style="background:var(--axis);width:' + Math.max(0, x.b / maxCmp * 100) + '%"></div></div>' +
+            '<div class="row small muted" style="margin-top:2px"><span>' + fmt(x.a) + '</span><span>antes ' + fmt(x.b) + '</span></div></div>';
+        }).join('') + (s.actual ? '<p class="small muted">El ciclo actual aún no ha terminado: compáralo con cuidado.</p>' : '');
+    } else h += '<div class="empty-state">Aparecerá cuando tengas al menos dos ciclos.</div>';
+    h += '</div>';
+
+    // --- En qué se va cada nómina
+    var rep = C.repartoCiclos(V, t).slice(-12), labRep = rep.map(function (r) { return etiquetaCiclo(r) + (r.actual ? '*' : ''); });
+    var hayPend = rep.some(function (r) { return r.sinGastar > 0.004; });
+    h += '<div class="card"><h2>En qué se va cada nómina</h2>' +
+      '<div class="legend"><span><i style="background:var(--series-2)"></i>Fijos</span><span><i style="background:var(--series-1)"></i>Gasto variable</span>' + (hayPend ? '<span><i style="background:var(--axis)"></i>Sin gastar aún</span>' : '') + '<span><i style="background:var(--series-3)"></i>Ahorro</span></div>' +
+      CH.apiladas(labRep, [
+        { name: 'Fijos', cls: 's2', values: rep.map(function (r) { return r.fijos; }) },
+        { name: 'Gasto variable', cls: 's1', values: rep.map(function (r) { return Math.max(0, r.variables); }) },
+        { name: 'Sin gastar aún', cls: 'sg', values: rep.map(function (r) { return r.sinGastar; }) },
+        { name: 'Ahorro', cls: 's3', values: rep.map(function (r) { return Math.max(0, r.ahorro); }) }
+      ], { aria: 'Reparto de cada nómina en fijos, gasto variable y ahorro' }) +
+      '<details><summary>Ver tabla</summary><table class="data"><tr><th>Ciclo</th><th>Ingresos</th><th>Fijos</th><th>Variable</th><th>Ahorro</th></tr>' +
+      rep.slice().reverse().map(function (r) { return '<tr><td>' + fCorta(r.inicio) + (r.actual ? '*' : '') + '</td><td>' + fmt(r.base) + '</td><td>' + fmt(r.fijos) + '</td><td>' + fmt(r.variables) + '</td><td>' + fmt(r.ahorro) + '</td></tr>'; }).join('') +
+      '</table></details>' + (rep.some(function (r) { return r.actual; }) ? '<p class="small muted">* Ciclo en curso: el ahorro es tu objetivo si gastas lo previsto.</p>' : '') + '</div>';
+
+    // --- Cuándo gastas
+    var DSEM = ['L', 'M', 'X', 'J', 'V', 'S', 'D'], porDia = [0, 0, 0, 0, 0, 0, 0];
+    dias.slice(0, hoyIdx).forEach(function (d) { var w = (C.parseISO(d.fecha).getUTCDay() + 6) % 7; porDia[w] += d.importe; });
+    var maxDia = Math.max.apply(null, dias.map(function (d) { return d.importe; }).concat([0.01]));
+    var offset = (C.parseISO(cSel.inicio).getUTCDay() + 6) % 7, celdas = '';
+    for (var k = 0; k < offset; k++) celdas += '<span class="cal-vacia"></span>';
+    dias.forEach(function (d, i) {
+      var fut = i >= hoyIdx, v = d.importe, a2 = v > 0 ? Math.round(18 + 82 * v / maxDia) : 0;
+      celdas += '<span class="cal-dia' + (fut ? ' fut' : '') + '" style="' + (a2 ? 'background:color-mix(in srgb, var(--series-1) ' + a2 + '%, transparent)' : '') + '" data-tip="' + esc(fLarga(d.fecha) + '\n' + (fut ? 'aún no ha llegado' : fmt(v))) + '">' + C.parseISO(d.fecha).getUTCDate() + '</span>';
+    });
+    h += '<div class="card"><h2>Cuándo gastas</h2>' +
+      CH.bars(DSEM, porDia.map(function (v) { return C.r2(v); }), { aria: 'Gasto variable por día de la semana', tick: function (v) { return Math.round(v) + ''; }, fmt: function (v) { return fmt(v); } }) +
+      '<div class="small sec" style="margin:10px 0 6px">Calendario del ciclo · más intenso = más gasto</div>' +
+      '<div class="cal">' + DSEM.map(function (d) { return '<span class="cal-cab">' + d + '</span>'; }).join('') + celdas + '</div></div>';
 
     var ult = stats.slice(-12), labels = ult.map(etiquetaCiclo);
     h += '<div class="card"><h2>Ingresos y gastos por ciclo</h2>' +

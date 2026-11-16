@@ -686,6 +686,28 @@ var HuchaCore = (function () {
     });
   }
 
+  // ---------- Gasto variable día a día (mismas reglas que el presupuesto) ----------
+  function gastoPorDia(state, ciclo) {
+    var dias = {}, n = diffDays(ciclo.inicio, ciclo.fin) + 1;
+    for (var i = 0; i < n; i++) dias[addDays(ciclo.inicio, i)] = 0;
+    (state.movimientos || []).forEach(function (m) {
+      if (dias[m.fecha] === undefined) return;
+      if (m.origen === 'redondeo' && m.tipo === 'transferencia') { dias[m.fecha] += num(m.importe); return; }
+      if (!esVariable(m)) return;
+      if (m.tipo === 'gasto') dias[m.fecha] += parteMia(m);
+      else if (m.tipo === 'ingreso' && m.reembolso && !m.vinculado && m.cat) dias[m.fecha] -= num(m.importe);
+    });
+    return Object.keys(dias).sort().map(function (f) { return { fecha: f, importe: r2(dias[f]) }; });
+  }
+
+  /** En qué se va cada ciclo: fijos, gasto variable y lo que queda (ahorro). */
+  function repartoCiclos(state, hoy) {
+    return ciclos(state, hoy).map(function (c) {
+      var p = presupuesto(state, c, c.fin < hoy ? c.fin : hoy);
+      return { inicio: c.inicio, fin: c.fin, actual: c.estimado, base: p.base, fijos: p.fijos, variables: p.gastado, ahorro: r2(p.base - p.fijos - p.gastado) };
+    });
+  }
+
   // ---------- Datos de ejemplo (modo demo, sin datos reales) ----------
   function estadoEjemplo(hoy) {
     var ini = addDays(hoy, -6);
@@ -762,7 +784,7 @@ var HuchaCore = (function () {
     r2: r2, num: num, fmt: fmt, uid: uid, redondeo: redondeo, interesDiario: interesDiario,
     saldos: saldos, patrimonio: patrimonio, ciclos: ciclos, cicloDe: cicloDe, ocurrencias: ocurrencias,
     presupuesto: presupuesto, alertas: alertas, pendientesCobro: pendientesCobro, propuestaNomina: propuestaNomina,
-    fijosAnteriores: fijosAnteriores, REDONDEOS: REDONDEOS, ahorroReal: ahorroReal, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
+    gastoPorDia: gastoPorDia, repartoCiclos: repartoCiclos, fijosAnteriores: fijosAnteriores, REDONDEOS: REDONDEOS, ahorroReal: ahorroReal, deudas: deudas, totalMeDeben: totalMeDeben, personasConocidas: personasConocidas, clavePersona: clavePersona, SIN_ASIGNAR: SIN_ASIGNAR,
     procesarAutomaticos: procesarAutomaticos, aplicarOps: aplicarOps, estadisticas: estadisticas,
     categoriasBase: categoriasBase, estadoEjemplo: estadoEjemplo, parteMia: parteMia
   };

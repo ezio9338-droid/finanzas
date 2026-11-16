@@ -126,6 +126,67 @@ var HuchaCharts = (function () {
     return out.join('');
   }
 
+  /** Gasto acumulado del ciclo frente a la línea ideal. acum: valores hasta hoy; ideal: valores de todo el ciclo. */
+  function acumulado(acum, ideal, fechas, opts) {
+    opts = opts || {};
+    var H = 180, padL = 44, padR = 10, padT = 12, padB = 24, n = ideal.length;
+    var hi = Math.max.apply(null, ideal.concat(acum).concat([1])), lo = Math.min.apply(null, acum.concat([0]));
+    var ticks = niceTicks(lo, hi, 4), y0 = ticks[0], y1 = ticks[ticks.length - 1];
+    function y(v) { return padT + (H - padT - padB) * (1 - (v - y0) / (y1 - y0)); }
+    var step = (W - padL - padR) / Math.max(1, n - 1);
+    function x(i) { return padL + step * i; }
+    var out = ['<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(opts.aria || '') + '">'];
+    ticks.forEach(function (t) {
+      out.push('<line class="grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(t) + '" y2="' + y(t) + '"/>');
+      out.push('<text x="' + (padL - 6) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + compact(t, '', ticks[1] - ticks[0]) + '</text>');
+    });
+    out.push('<path class="goal" fill="none" d="' + ideal.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join('') + '"/>');
+    out.push('<text class="lbl" x="' + (W - padR) + '" y="' + (y(ideal[n - 1]) - 6) + '" text-anchor="end">ritmo ideal</text>');
+    if (acum.length) {
+      var d = acum.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join('');
+      out.push('<path class="line1" d="' + d + '"/>');
+      var k = acum.length - 1;
+      out.push('<circle class="dot1" cx="' + x(k) + '" cy="' + y(acum[k]) + '" r="5"/>');
+    }
+    for (var i = 0; i < n; i++) {
+      var tip = fechas[i] + (i < acum.length ? '\nGastado: ' + HuchaCore.fmt(acum[i]) : '') + '\nIdeal: ' + HuchaCore.fmt(ideal[i]);
+      out.push('<rect class="hit" data-tip="' + esc(tip) + '" x="' + (x(i) - step / 2) + '" y="' + padT + '" width="' + step + '" height="' + (H - padT - padB) + '"/>');
+      if (i === 0 || i === n - 1 || (i % 7 === 0 && n - 1 - i >= 5)) out.push('<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="' + (i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle') + '">' + esc(fechas[i]) + '</text>');
+    }
+    out.push('</svg>');
+    return out.join('');
+  }
+
+  /** Barras apiladas (valores ≥ 0). series: [{name, cls, values}] de abajo arriba. */
+  function apiladas(labels, series, opts) {
+    opts = opts || {};
+    var H = 200, padL = 40, padR = 6, padT = 10, padB = 24, gap = 2;
+    var tot = labels.map(function (_, i) { return series.reduce(function (a, s) { return a + Math.max(0, s.values[i] || 0); }, 0); });
+    var ticks = niceTicks(0, Math.max.apply(null, tot.concat([1])), 4), y1 = ticks[ticks.length - 1];
+    function h(v) { return (H - padT - padB) * v / y1; }
+    var n = labels.length, band = (W - padL - padR) / n, bw = Math.min(30, band * 0.6);
+    var out = ['<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(opts.aria || '') + '">'];
+    ticks.forEach(function (t) {
+      var yy = H - padB - h(t);
+      out.push('<line class="grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '"/>');
+      out.push('<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + compact(t, '', ticks[1] - ticks[0]) + '</text>');
+    });
+    labels.forEach(function (lab, i) {
+      var x = padL + band * i + (band - bw) / 2, base = H - padB, vis = series.filter(function (s) { return (s.values[i] || 0) > 0.004; });
+      vis.forEach(function (s, j) {
+        var hh = h(s.values[i]), top = j === vis.length - 1;
+        var alto = Math.max(1, hh - (top ? 0 : gap));
+        out.push(top ? roundTopRect(x, base - hh, bw, alto, true, s.cls) : '<rect class="' + s.cls + '" x="' + x + '" y="' + (base - hh + gap) + '" width="' + bw + '" height="' + alto + '"/>');
+        base -= hh;
+      });
+      var tip = [lab].concat(series.map(function (s) { return s.name + ': ' + HuchaCore.fmt(s.values[i] || 0); })).join('\n');
+      out.push('<rect class="hit" data-tip="' + esc(tip) + '" x="' + (padL + band * i) + '" y="' + padT + '" width="' + band + '" height="' + (H - padT - padB) + '"/>');
+      out.push('<text x="' + (padL + band * i + band / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(lab) + '</text>');
+    });
+    out.push('</svg>');
+    return out.join('');
+  }
+
   // ---------- Tooltip (toque o ratón) ----------
   var tipEl = null;
   function showTip(target, cx, cy) {
@@ -147,5 +208,5 @@ var HuchaCharts = (function () {
     window.addEventListener('scroll', hideTip, { passive: true });
   }
 
-  return { groupedBars: groupedBars, bars: bars, line: line, bindTips: bindTips, hideTip: hideTip, compact: compact };
+  return { groupedBars: groupedBars, bars: bars, line: line, acumulado: acumulado, apiladas: apiladas, bindTips: bindTips, hideTip: hideTip, compact: compact };
 })();
