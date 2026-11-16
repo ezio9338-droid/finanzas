@@ -192,7 +192,7 @@ var HuchaCore = (function () {
     var fijosPagados = 0, fijosPendientes = 0, pension = 0, porCat = {}, total = 0, lineasFijos = [];
     var enCiclo = (state.movimientos || []).filter(function (m) { return m.fecha >= ciclo.inicio && m.fecha <= ciclo.fin; });
 
-    // Otros ingresos del ciclo (Stripe, ventas, Bizum en efectivo…): cuentan como la nómina.
+    // Otros ingresos del ciclo (ventas, trabajos puntuales…): cuentan como la nómina.
     var extras = 0, lineasExtras = [], desdeExtras = extrasDesde(state);
     enCiclo.forEach(function (m) {
       if (esIngresoExtra(m, tipos, desdeExtras)) { extras += num(m.importe); lineasExtras.push({ concepto: m.nota || m.sub || 'Ingreso', fecha: m.fecha, importe: num(m.importe) }); }
@@ -227,7 +227,7 @@ var HuchaCore = (function () {
         return;
       }
       if (m.origen === 'redondeo' && m.tipo === 'transferencia') {
-        // El redondeo sale de la cuenta diaria: cuenta como gasto (paga el aplazado vía Mac)
+        // El redondeo sale de la cuenta diaria: cuenta como gasto (va al pocket de redondeo)
         porCat[REDONDEOS] = (porCat[REDONDEOS] || 0) + num(m.importe); total += num(m.importe);
         return;
       }
@@ -421,7 +421,7 @@ var HuchaCore = (function () {
     if (aPasar > 0 && sob && sob !== nomina.cuenta) {
       out.push({ tipo: 'transferencia', fecha: hoy, cuenta: nomina.cuenta, destino: sob, importe: aPasar, nota: 'Nómina a cuenta diaria' });
     }
-    // El traspaso desde Mac para reponer la cuota NO se propone aquí: la app lo apunta sola el día del cargo.
+    // El traspaso desde el pocket para reponer el cargo NO se propone aquí: la app lo apunta sola el día del cargo.
     return { sobrante: sobrante, enDiaria: enDiaria, deudaTarjeta: deudaTarjeta, reservado: r2(reservar), reservas: reservas, movimientos: out };
   }
 
@@ -457,7 +457,7 @@ var HuchaCore = (function () {
             cat: f.cat || '', sub: f.sub || '', nota: f.concepto, miParte: '', nomina: false,
             reembolso: !!f.reembolso, vinculado: '', origen: 'fijo:' + f.id, act: Date.now()
           });
-          // Si el cargo se repone desde otra cuenta (p. ej. Mac), el traspaso se apunta el mismo día
+          // Si el cargo se repone desde otra cuenta (p. ej. un pocket), el traspaso se apunta el mismo día
           var cfgA = state.config || {};
           if (f.financiaDesde && cfgA.cuentaSobrante && f.financiaDesde !== cfgA.cuentaSobrante) {
             add({
@@ -738,8 +738,8 @@ var HuchaCore = (function () {
       ['Comida', '🛒', 250, ['Supermercado', 'Restaurantes', 'Cafés y snacks']],
       ['Transporte', '⛽', 90, ['Gasolina', 'Parking y peajes', 'Mantenimiento', 'Transporte público']],
       ['Casa', '🏠', 20, ['TV e internet', 'Suministros', 'Hogar']],
-      ['Suscripciones', '🔁', 0, ['Claude', 'Spotify', 'Otras']],
-      ['Tecnología', '💻', 15, ['Railway', 'Gadgets y software']],
+      ['Suscripciones', '🔁', 0, ['Streaming', 'Software', 'Otras']],
+      ['Tecnología', '💻', 15, ['Servicios online', 'Gadgets']],
       ['Salud y deporte', '💪', 25, ['Gimnasio', 'Farmacia', 'Médico']],
       ['Ocio', '🎉', 130, ['Salir', 'Viajes', 'Juegos', 'Cultura']],
       ['Ropa', '👕', 50, []],

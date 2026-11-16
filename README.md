@@ -68,7 +68,7 @@ En el PC puedes usar la misma dirección en cualquier navegador.
 
 | Quiero… | Cómo |
 |---|---|
-| Apuntar un gasto | **＋** → importe → categoría → Guardar. Si pagas con la débito, el redondeo a Mac se apunta solo. |
+| Apuntar un gasto | **＋** → importe → categoría → Guardar. Si pagas con la débito, el redondeo a tu *pocket* se apunta solo. |
 | Una cena que me pagarán | Activa **Compartido**, pon **tu parte** y añade **quién te debe** y cuánto (o pulsa *Repartir a partes iguales*). Aparece en la pestaña **Deudas**. |
 | Me pagan una deuda | Pestaña **Deudas** → toca la persona → **Me ha pagado**. O bien ＋ → Ingreso → **Salda una deuda**. |
 | Recordar lo que debo yo | Pestaña **Deudas** → **＋ Añadir lo que debo**. No cambia los saldos. |

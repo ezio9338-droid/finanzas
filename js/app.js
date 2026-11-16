@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.17.0';
+  var VERSION = '1.17.1';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -159,7 +159,7 @@
     return IK.svg(c && c.icono ? c.icono : 'tag');
   }
   function cicloActual() { var cs = C.ciclos(V, hoy()); return cs[cs.length - 1]; }
-  /** Traspasos de reposición (p. ej. Mac → Revolut) que tocan hoy o hace poco y aún no has marcado como hechos. */
+  /** Traspasos de reposición (p. ej. pocket → cuenta diaria) que tocan hoy o hace poco y aún no has marcado como hechos. */
   function traspasosPendientes(t) {
     var sob = V.config.cuentaSobrante, out = [], vistos = {};
     if (!sob) return out;
@@ -1060,7 +1060,7 @@
       '<li><span class="grow"><b>= Sobrante para ahorrar</b></span><span class="amount num">' + fmt(prop.sobrante) + '</span></li>' +
       '</ul>' +
       '<p class="small sec">En ' + esc(nombreCuenta(nom.cuenta)) + ' se quedan ' + fmt(prop.reservado) + (prop.reservas.length ? ' (' + esc(prop.reservas.map(function (r) { return r.concepto + ' ' + C.fmt(r.importe); }).join(' + ')) + ', más los céntimos)' : '') + '. ' +
-      'El día del cargo de la cuota, la app apunta sola el traspaso de reposición desde Mac.</p>' +
+      (V.fijos || []).filter(function (f) { return f.financiaDesde && f.activo !== false; }).map(function (f) { return 'El día del cargo de «' + esc(f.concepto) + '», la app apunta sola el traspaso de reposición desde ' + esc(nombreCuenta(f.financiaDesde)) + '. '; }).join('') + '</p>' +
       '<ul class="list">' + lineas.map(function (l) {
         return '<li><input type="checkbox" checked data-r="' + l.idx + '" aria-label="Incluir"><div class="grow"><div class="title">' + esc(nombreCuenta(l.cuenta)) + ' → ' + esc(nombreCuenta(l.destino)) + '</div><div class="subline">' + esc(l.nota) + '</div></div>' +
           '<input class="input num" style="max-width:110px;text-align:right" inputmode="decimal" data-ri="' + l.idx + '" value="' + String(l.importe).replace('.', ',') + '"></li>';
@@ -1105,7 +1105,7 @@
       h += '<div class="seg">' + [['gasto', 'Gasto'], ['ingreso', 'Ingreso'], ['transferencia', 'Transferencia']].map(function (t) {
         return '<button data-g="tipo" data-v="' + t[0] + '" class="' + (x.tipo === t[0] ? 'on' : '') + '">' + t[1] + '</button>';
       }).join('') + '</div>';
-      h += campo('Concepto', '<input class="input" data-g="concepto" maxlength="80" value="' + esc(x.concepto) + '" placeholder="p. ej. YouTube Premium Lite">');
+      h += campo('Concepto', '<input class="input" data-g="concepto" maxlength="80" value="' + esc(x.concepto) + '" placeholder="p. ej. Seguro del coche">');
       if (x.tipo === 'transferencia') {
         h += '<div class="inline">' + campo('Desde', '<select class="input" data-g="cuenta">' + cuentasOpciones(x.cuenta) + '</select>') +
           campo('Hacia', '<select class="input" data-g="destino"><option value="">Elige…</option>' + cuentasOpciones(x.destino) + '</select>') + '</div>';
