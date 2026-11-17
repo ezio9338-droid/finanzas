@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = HuchaCore, CH = HuchaCharts;
-  var VERSION = '1.18.3';
+  var VERSION = '1.18.4';
   var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   var TIPOS_CUENTA = { diario: 'Día a día', efectivo: 'Día a día', pocket: 'Día a día', ahorro: 'Ahorro e inversión', inversion: 'Ahorro e inversión', pension: 'Ahorro e inversión', credito: 'Tarjetas de crédito' };
@@ -435,8 +435,11 @@
       var subs = s.porSubcategoria && s.porSubcategoria[c.cat] ? Object.keys(s.porSubcategoria[c.cat]).map(function (k) { return { sub: k, v: s.porSubcategoria[c.cat][k] }; }) : [];
       subs = subs.filter(function (x) { return Math.abs(x.v) > 0.004; }).sort(function (a, b) { return b.v - a.v; });
       var maxSub = subs.length ? Math.max.apply(null, subs.map(function (x) { return x.v; }).concat([0.01])) : 1;
-      return '<details class="catdet"><summary><div class="catrow"><div class="row small"><span class="catname">' + iconoCat(c.cat) + esc(c.cat || 'Sin categoría') + '</span><span class="num sec">' + fmt(c.v) + ' <span class="muted">· ' + Math.round(c.v / s.gastos * 100) + ' %</span></span></div>' +
-        '<div class="bar thin"><div class="fill" style="width:' + (c.v / max * 100) + '%"></div></div></div></summary>' +
+      var fila = '<div class="catrow"><div class="row small"><span class="catname">' + iconoCat(c.cat) + esc(c.cat || 'Sin categoría') + '</span><span class="num sec">' + fmt(c.v) + ' <span class="muted">· ' + Math.round(c.v / s.gastos * 100) + ' %</span></span></div>' +
+        '<div class="bar thin"><div class="fill" style="width:' + (c.v / max * 100) + '%"></div></div></div>';
+      // Sin subcategorías con nombre no hay nada que desplegar
+      if (!subs.some(function (x) { return x.sub; })) return fila;
+      return '<details class="catdet"><summary>' + fila + '</summary>' +
         (subs.length ? '<ul class="list small subcats">' + subs.map(function (x) {
           return '<li><div class="grow"><div class="row"><span>' + esc(x.sub || 'Sin subcategoría') + '</span><span class="num ' + (x.v < 0 ? 'amount pos' : 'sec') + '">' + fmt(x.v) + (c.v > 0 && x.v > 0 ? ' <span class="muted">· ' + Math.round(x.v / c.v * 100) + ' %</span>' : '') + '</span></div>' +
             (x.v > 0 ? '<div class="bar thin" style="margin-top:4px"><div class="fill" style="width:' + (x.v / maxSub * 100) + '%;opacity:.7"></div></div>' : '') + '</div></li>';

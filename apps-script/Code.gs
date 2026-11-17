@@ -485,13 +485,14 @@ function escribirHoja(nombre, filas) {
 
 function escribirTodo(st, que) {
   if (que.movimientos) {
-    st.movimientos.sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : (a.act || 0) - (b.act || 0); });
-    escribirHoja('Movimientos', st.movimientos);
+    // Los más recientes arriba
+    var ordenados = st.movimientos.slice().sort(function (a, b) { return a.fecha > b.fecha ? -1 : a.fecha < b.fecha ? 1 : (b.act || 0) - (a.act || 0); });
+    escribirHoja('Movimientos', ordenados);
   }
   if (que.cuentas) escribirHoja('Cuentas', st.cuentas.slice().sort(function (a, b) { return a.orden - b.orden; }));
   if (que.categorias) escribirHoja('Categorias', st.categorias);
   if (que.fijos) escribirHoja('Fijos', st.fijos);
-  if (que.deudas) escribirHoja('Deudas', (st.deudas || []).slice().sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; }));
+  if (que.deudas) escribirHoja('Deudas', (st.deudas || []).slice().sort(function (a, b) { return a.fecha > b.fecha ? -1 : 1; }));
   if (que.debo) escribirHoja('Debo', st.debo || []);
   if (que.config) escribirHoja('Config', Object.keys(st.config).map(function (k) {
     return { clave: k, valor: st.config[k], desc: DESC_CONFIG[k] || '' };
